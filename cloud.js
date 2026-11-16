@@ -1,7 +1,8 @@
 /* ============================================================
    饭记 · Supabase 客户端
    不用 SDK，直接打 REST（auth / rest / storage 三个端点）。
-   好处：单文件、无 CDN 依赖、国内加载不受影响。
+   v2 模型：一顿饭是共享实体，每人在下面留一条 meal_review，
+            每道菜每人可以单独打分（dish_review）。
    ============================================================ */
 window.Cloud = (function () {
   "use strict";
@@ -21,6 +22,7 @@ window.Cloud = (function () {
   function load() { cfg = readJSON(CFG_KEY); ses = readJSON(SES_KEY); return cfg; }
   function config() { return cfg; }
   function session() { return ses; }
+  function userId() { return ses && ses.user ? ses.user.id : null; }
   function workspaceId() { return wsId; }
   function setConfig(url, key) {
     cfg = { url: String(url).trim().replace(/\/+$/, ""), key: String(key).trim() };
@@ -64,8 +66,8 @@ window.Cloud = (function () {
     return data;
   }
 
-  /* ---------- 登录（邮箱 + 密码，不发邮件、不跳转） ---------- */
-  function applySession(r){
+  /* ---------- 登录（邮箱 + 密码） ---------- */
+  function applySession(r) {
     if (!r || !r.access_token) throw new Error("登录响应异常");
     ses = {
       access_token: r.access_token,
@@ -77,7 +79,6 @@ window.Cloud = (function () {
     return ses;
   }
 
-  // 从 #access_token=... 里把会话捡回来（旧魔法链接用，留着不碍事）
   function recoverHash() {
     const h = location.hash || "";
     if (!h || h.indexOf("access_token") < 0) return false;
@@ -100,8 +101,7 @@ window.Cloud = (function () {
       method: "POST",
       body: { email: String(email).trim(), password: String(password) }
     });
-    // 项目开了「确认邮箱」时，signup 只返回 user，没有 session
-    if (!r || !r.access_token){
+    if (!r || !r.access_token) {
       throw new Error("注册成功，但这个项目还开着「确认邮箱」。去 Supabase 控制台关掉 Authentication → Sign In / Providers → Email → Confirm email。");
     }
     return applySession(r);
@@ -135,18 +135,16 @@ window.Cloud = (function () {
     return ses.user;
   }
 
-  async function sendLoginLink(email) {
-    const redirect = location.origin + location.pathname;
-    await call("/auth/v1/otp", {
-      method: "POST",
-      body: { email: String(email).trim(), create_user: true, options: { email_redirect_to: redirect } }
-    });
-  }
-
   async function logout() {
     try { await call("/auth/v1/logout", { method: "POST" }); } catch (e) {}
     ses = null; wsId = null;
     localStorage.removeItem(SES_KEY);
+  }
+
+  // 显示名：邮箱 @ 前面那截
+  function myName() {
+    const email = ses && ses.user ? ses.user.email : "";
+    return (email.split("@")[0] || "我").slice(0, 20);
   }
 
   /* ---------- 空间 ---------- */
@@ -163,7 +161,6 @@ window.Cloud = (function () {
 
   async function createWorkspace(name) {
     await ensureFresh();
-    // 空间 + 成员关系在数据库端原子创建（前端没有直接插入 workspace_members 的权限）
     const id = await call("/rest/v1/rpc/create_workspace", {
       method: "POST",
       body: { ws_name: name || "我们的饭记" }
@@ -183,67 +180,168 @@ window.Cloud = (function () {
   }
 
   /* ---------- 数据 ---------- */
-  async function listMeals() {
-    await ensureFresh();
-    if (!wsId) throw new Error("还没加入空间");
-    const rows = await call(
-      "/rest/v1/meals?select=id,restaurant,eaten_on,meal_type,rating,note,created_at," +
-      "dishes(id,name,rating,note,position),photos(id,storage_path)" +
-      "&workspace_id=eq." + wsId + "&order=eaten_on.desc,created_at.desc"
-    );
-    (rows || []).forEach(r => (r.photos || []).forEach(p => { photoPaths[p.id] = p.storage_path; }));
-    return (rows || []).map(r => ({
+  const MEAL_SELECT =
+    "id,restaurant,eaten_on,meal_type,note,created_by,created_at," +
+    "dishes(id,name,position,dish_reviews(user_id,reviewer_name,rating,note))," +
+    "meal_reviews(user_id,reviewer_name,rating,comment,created_at)," +
+    "photos(id,storage_path)";
+
+  function avgOf(list, key) {
+    const vals = (list || []).map(x => Number(x[key])).filter(v => v > 0);
+    if (!vals.length) return { avg: 0, count: 0 };
+    return { avg: vals.reduce((a, b) => a + b, 0) / vals.length, count: vals.length };
+  }
+
+  function mapMeal(r) {
+    const me = userId();
+    const dishes = (r.dishes || [])
+      .slice()
+      .sort((a, b) => (a.position || 0) - (b.position || 0))
+      .map(d => {
+        const dr = (d.dish_reviews || []).map(x => ({
+          userId: x.user_id, name: x.reviewer_name || "某人", rating: x.rating, note: x.note || ""
+        }));
+        const s = avgOf(dr, "rating");
+        return { id: d.id, name: d.name, reviews: dr, avg: s.avg, count: s.count };
+      });
+
+    const reviews = (r.meal_reviews || []).map(x => ({
+      userId: x.user_id, name: x.reviewer_name || "某人",
+      rating: x.rating, comment: x.comment || "", createdAt: x.created_at
+    }));
+    const s = avgOf(reviews, "rating");
+    const mine = reviews.find(x => x.userId === me) || null;
+
+    return {
       id: r.id,
       restaurant: r.restaurant,
       date: r.eaten_on,
       mealType: r.meal_type,
-      rating: r.rating,
       note: r.note || "",
+      createdBy: r.created_by,
       createdAt: Date.parse(r.created_at) || 0,
-      dishes: (r.dishes || [])
-        .slice()
-        .sort((a, b) => (a.position || 0) - (b.position || 0))
-        .map(d => ({ id: d.id, name: d.name, rating: d.rating, note: d.note || "" })),
+      dishes,
+      reviews,
+      avg: s.avg,
+      count: s.count,
+      people: reviews.length,
+      joined: !!mine,
+      myRating: mine && mine.rating ? mine.rating : 0,
+      myComment: mine ? mine.comment : "",
+      isMine: r.created_by === me,
       photoIds: (r.photos || []).map(p => p.id)
-    }));
+    };
   }
 
-  async function saveMeal(m, newPhotos, removedPhotoIds) {
+  async function listMeals() {
+    await ensureFresh();
+    if (!wsId) throw new Error("还没加入空间");
+    const rows = await call(
+      "/rest/v1/meals?select=" + MEAL_SELECT +
+      "&workspace_id=eq." + wsId + "&order=eaten_on.desc,created_at.desc"
+    );
+    (rows || []).forEach(r => (r.photos || []).forEach(p => { photoPaths[p.id] = p.storage_path; }));
+    return (rows || []).map(mapMeal);
+  }
+
+  // 建一餐：主记录 + 菜单 + 我作为第一个参与者的评价 + 新照片
+  async function createMeal(m, newPhotos) {
     await ensureFresh();
     if (!wsId) throw new Error("还没加入空间");
 
-    // 1) 主记录：upsert
-    await call("/rest/v1/meals?on_conflict=id", {
+    await call("/rest/v1/meals", {
       method: "POST",
-      headers: { Prefer: "resolution=merge-duplicates,return=minimal" },
+      headers: { Prefer: "return=minimal" },
       body: {
         id: m.id,
         workspace_id: wsId,
         restaurant: m.restaurant,
         eaten_on: m.date,
         meal_type: m.mealType,
-        rating: m.rating,
+        note: m.note || ""
+      }
+    });
+
+    if (m.dishes.length) {
+      await call("/rest/v1/dishes", {
+        method: "POST",
+        headers: { Prefer: "return=minimal" },
+        body: m.dishes.map((d, i) => ({ meal_id: m.id, name: d.name.trim(), position: i }))
+      });
+    }
+
+    // 我自己这条评价（点完「记一顿」就等于报名了）
+    if (m.myRating) {
+      await call("/rest/v1/meal_reviews?on_conflict=meal_id,user_id", {
+        method: "POST",
+        headers: { Prefer: "resolution=merge-duplicates,return=minimal" },
+        body: {
+          meal_id: m.id, user_id: userId(), reviewer_name: myName(),
+          rating: m.myRating, comment: m.myComment || ""
+        }
+      });
+    }
+
+    await uploadPhotos(m.id, newPhotos);
+  }
+
+  // 改一餐：只改店名/日期/菜单/说明，不动别人的评价
+  async function updateMeal(m, newPhotos, removedPhotoIds) {
+    await ensureFresh();
+    await call("/rest/v1/meals?id=eq." + m.id, {
+      method: "PATCH",
+      headers: { Prefer: "return=minimal" },
+      body: {
+        restaurant: m.restaurant,
+        eaten_on: m.date,
+        meal_type: m.mealType,
         note: m.note || "",
         updated_at: new Date().toISOString()
       }
     });
 
-    // 2) 菜：整体替换
-    await call("/rest/v1/dishes?meal_id=eq." + m.id, { method: "DELETE", headers: { Prefer: "return=minimal" } });
-    const dishes = (m.dishes || []).filter(d => (d.name || "").trim());
-    if (dishes.length) {
-      await call("/rest/v1/dishes", {
+    // 菜单同步：已有的按 id 更新、缺的插入、多余的删（删菜会连带删掉它的评分）
+    const existing = await call("/rest/v1/dishes?select=id&meal_id=eq." + m.id);
+    const keepIds = new Set(m.dishes.filter(d => d.id).map(d => d.id));
+    for (const row of existing || []) {
+      if (!keepIds.has(row.id)) {
+        await call("/rest/v1/dishes?id=eq." + row.id, { method: "DELETE", headers: { Prefer: "return=minimal" } });
+      }
+    }
+    for (let i = 0; i < m.dishes.length; i++) {
+      const d = m.dishes[i];
+      if (d.id) {
+        await call("/rest/v1/dishes?id=eq." + d.id, {
+          method: "PATCH",
+          headers: { Prefer: "return=minimal" },
+          body: { name: d.name.trim(), position: i }
+        });
+      }
+    }
+    const toInsert = m.dishes.filter(d => !d.id);
+    if (toInsert.length) {
+      // 新菜要拿到 id 才能给人打分，所以这里要回传
+      const created = await call("/rest/v1/dishes", {
         method: "POST",
-        headers: { Prefer: "return=minimal" },
-        body: dishes.map((d, i) => ({
-          meal_id: m.id, name: d.name.trim(), rating: d.rating || 4, note: d.note || "", position: i
+        headers: { Prefer: "return=representation" },
+        body: toInsert.map(d => ({
+          meal_id: m.id, name: d.name.trim(),
+          position: m.dishes.findIndex(x => x === d)
         }))
+      });
+      (created || []).forEach(row => {
+        const target = toInsert.find(d => d.name.trim() === row.name);
+        if (target) target.id = row.id;
       });
     }
 
-    // 3) 新照片：先传存储，再落表
-    for (const p of newPhotos) {
-      const path = wsId + "/" + m.id + "/" + p.id + ".jpg";
+    await uploadPhotos(m.id, newPhotos);
+    await deletePhotos(removedPhotoIds);
+  }
+
+  async function uploadPhotos(mealId, newPhotos) {
+    for (const p of newPhotos || []) {
+      const path = wsId + "/" + mealId + "/" + p.id + ".jpg";
       await call("/storage/v1/object/meal-photos/" + path, {
         method: "POST",
         raw: true,
@@ -253,13 +351,14 @@ window.Cloud = (function () {
       await call("/rest/v1/photos", {
         method: "POST",
         headers: { Prefer: "return=minimal" },
-        body: { id: p.id, meal_id: m.id, storage_path: path }
+        body: { id: p.id, meal_id: mealId, storage_path: path }
       });
       photoPaths[p.id] = path;
     }
+  }
 
-    // 4) 删掉的照片
-    for (const pid of removedPhotoIds || []) {
+  async function deletePhotos(ids) {
+    for (const pid of ids || []) {
       const path = photoPaths[pid];
       if (path) {
         try { await call("/storage/v1/object/meal-photos/" + path, { method: "DELETE" }); } catch (e) {}
@@ -269,9 +368,50 @@ window.Cloud = (function () {
     }
   }
 
+  // 点「我也吃了」
+  async function joinMeal(mealId) {
+    await ensureFresh();
+    await call("/rest/v1/meal_reviews?on_conflict=meal_id,user_id", {
+      method: "POST",
+      headers: { Prefer: "resolution=merge-duplicates,return=minimal" },
+      body: { meal_id: mealId, user_id: userId(), reviewer_name: myName() }
+    });
+  }
+
+  // 保存我的评分和评论（含每道菜）
+  async function saveMyReview(mealId, rating, comment, dishRatings) {
+    await ensureFresh();
+    await call("/rest/v1/meal_reviews?on_conflict=meal_id,user_id", {
+      method: "POST",
+      headers: { Prefer: "resolution=merge-duplicates,return=minimal" },
+      body: {
+        meal_id: mealId, user_id: userId(), reviewer_name: myName(),
+        rating: rating, comment: comment || "", updated_at: new Date().toISOString()
+      }
+    });
+
+    const rows = (dishRatings || []).filter(d => d.rating > 0);
+    if (rows.length) {
+      await call("/rest/v1/dish_reviews?on_conflict=dish_id,user_id", {
+        method: "POST",
+        headers: { Prefer: "resolution=merge-duplicates,return=minimal" },
+        body: rows.map(d => ({
+          dish_id: d.dishId, user_id: userId(), reviewer_name: myName(),
+          rating: d.rating, note: d.note || ""
+        }))
+      });
+    }
+    // 取消打分的菜，把记录删掉
+    const clear = (dishRatings || []).filter(d => !d.rating).map(d => d.dishId);
+    if (clear.length) {
+      await call("/rest/v1/dish_reviews?user_id=eq." + userId() + "&dish_id=in.(" + clear.join(",") + ")", {
+        method: "DELETE", headers: { Prefer: "return=minimal" }
+      });
+    }
+  }
+
   async function deleteMeal(id) {
     await ensureFresh();
-    // 先删存储对象（表级 cascade 不会动 storage）
     try {
       const rows = await call("/rest/v1/photos?select=id,storage_path&meal_id=eq." + id);
       for (const r of rows || []) {
@@ -283,7 +423,7 @@ window.Cloud = (function () {
   }
 
   /* ---------- 照片 ---------- */
-  const urlCache = new Map(); // photoId -> { url, exp }
+  const urlCache = new Map();
 
   async function photoURL(id) {
     const path = photoPaths[id];
@@ -308,11 +448,11 @@ window.Cloud = (function () {
   }
 
   return {
-    load, config, session, workspaceId, setConfig, clear,
-    recoverHash, ensureFresh, fetchUser, signUp, signIn, logout,
+    load, config, session, userId, workspaceId, setConfig, clear,
+    recoverHash, ensureFresh, fetchUser, signUp, signIn, logout, myName,
     currentWorkspace, createWorkspace, joinWorkspace,
-    listMeals, saveMeal, deleteMeal,
+    listMeals, createMeal, updateMeal, deleteMeal, joinMeal, saveMyReview,
     photoURL, photoBlob, photoPaths,
-    genId: () => crypto.randomUUID()
+    avgOf
   };
 })();

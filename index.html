@@ -84,6 +84,33 @@
   .thumbs img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:10px;background:#f1ece4;display:block}
   .thumbs .more{display:flex;align-items:center;justify-content:center;aspect-ratio:1;border-radius:10px;background:#f1ece4;color:var(--ink2);font-size:13px}
 
+  /* ---------- v2：一餐多人 ---------- */
+  .score{display:inline-flex;align-items:center;gap:6px;font-size:13px}
+  .score b{font-size:15px;color:var(--accent)}
+  .score em{font-style:normal;font-size:11px;color:#b3a898}
+  .dim{color:#b3a898;font-size:13px}
+  .bigscore{display:flex;align-items:baseline;gap:8px;margin:8px 0 4px}
+  .bigscore b{font-size:26px;line-height:1}
+  .bigscore span{font-size:12px;color:#b3a898}
+  .sechead{margin:18px 0 8px;font-size:13px;color:var(--ink2);font-weight:600;letter-spacing:.3px}
+  .dishlist{border-top:1px solid var(--line)}
+  .dishrow{padding:10px 0;border-bottom:1px solid var(--line)}
+  .dishline{display:flex;justify-content:space-between;align-items:center;gap:10px}
+  .dishline .n{font-weight:600;font-size:15px}
+  .dishavg{font-size:11px;color:#f0a828;letter-spacing:-.5px;white-space:nowrap}
+  .dishavg .off{color:#ddd5c8}
+  .dishavg em{font-style:normal;margin-left:4px;color:#b3a898;letter-spacing:0}
+  .dishmine{display:flex;align-items:center;gap:8px;margin-top:6px}
+  .inp.tiny{font-size:13px;padding:6px 8px;flex:1;border:1px solid var(--line)}
+  .review{padding:10px 0;border-bottom:1px solid var(--line)}
+  .review:last-child{border-bottom:0}
+  .rhead{display:flex;justify-content:space-between;align-items:center;gap:10px}
+  .who{font-weight:600;font-size:14px}
+  .rtext{margin:4px 0 0;font-size:14px;color:#5c5349;white-space:pre-wrap}
+  .mybox{background:#fff;border:1px solid var(--line);border-radius:14px;padding:12px}
+  .mylabel{font-size:13px;color:var(--ink2);margin-bottom:8px}
+  .mybox textarea{margin-top:10px;min-height:70px}
+
   /* ---------- empty / misc ---------- */
   .empty{text-align:center;padding:56px 20px;color:var(--ink2)}
   .empty .big{font-size:44px;margin-bottom:8px}
@@ -254,25 +281,94 @@ function lsWrite(v){ localStorage.setItem(LS_KEY, JSON.stringify(v)); }
 
 /* =========================================================
    本机存储（默认）：IndexedDB 优先，不可用时退化 localStorage
+   存的就是内存里那套结构，读出来时重算平均分
    ========================================================= */
+const LOCAL_USER = "local-user";
+
+function avgList(list){
+  const vals = (list || []).map(x => Number(x.rating)).filter(v => v > 0);
+  if (!vals.length) return { avg: 0, count: 0 };
+  return { avg: vals.reduce((a, b) => a + b, 0) / vals.length, count: vals.length };
+}
+function recalcLocal(m){
+  m.dishes = (m.dishes || []).map(d => {
+    const s = avgList(d.reviews);
+    return { id: d.id, name: d.name, reviews: d.reviews || [], avg: s.avg, count: s.count };
+  });
+  const s = avgList(m.reviews);
+  const mine = (m.reviews || []).find(r => r.userId === LOCAL_USER) || null;
+  m.avg = s.avg; m.count = s.count;
+  m.people = (m.reviews || []).length;
+  m.joined = !!mine;
+  m.myRating = mine && mine.rating ? mine.rating : 0;
+  m.myComment = mine ? (mine.comment || "") : "";
+  m.isMine = true;
+  return m;
+}
+
 const Local = {
   async init(){
     try { idb = await openDB(); useIDB = true; }
     catch(e){ useIDB = false; console.warn("IndexedDB 不可用，改用 localStorage", e); }
   },
-  async allMeals(){
+  async rawAll(){
     if (useIDB) return (await idbReq("meals", "readonly", s => s.getAll())) || [];
     return lsRead().meals;
   },
-  async saveMeal(m, newPhotos, removed){
-    for (const p of newPhotos) await this.putPhoto(p.id, p.blob);
-    for (const pid of removed || []) await this.delPhoto(pid);
+  async allMeals(){ return (await this.rawAll()).map(recalcLocal); },
+  async put(m){
     if (useIDB) return idbReq("meals", "readwrite", s => s.put(m));
     const d = lsRead(); const i = d.meals.findIndex(x => x.id === m.id);
     if (i >= 0) d.meals[i] = m; else d.meals.push(m); lsWrite(d);
   },
-  async delMeal(id){
-    const m = (await this.allMeals()).find(x => x.id === id);
+  async get(id){ return (await this.rawAll()).find(x => x.id === id) || null; },
+  async savePhotos(newPhotos, removed){
+    for (const p of newPhotos || []) await this.putPhoto(p.id, p.blob);
+    for (const pid of removed || []) await this.delPhoto(pid);
+  },
+  async createMeal(m, newPhotos){
+    await this.savePhotos(newPhotos, []);
+    const rec = {
+      ...m,
+      reviews: m.myRating ? [{ userId: LOCAL_USER, name: "我", rating: m.myRating, comment: m.myComment || "", createdAt: Date.now() }] : [],
+      dishes: (m.dishes || []).map(d => ({ id: uid(), name: d.name, reviews: [] })),
+      createdAt: Date.now(), isMine: true
+    };
+    delete rec.myRating; delete rec.myComment;
+    await this.put(rec);
+  },
+  async updateMeal(m, newPhotos, removed){
+    await this.savePhotos(newPhotos, removed);
+    const old = await this.get(m.id) || {};
+    // 菜单按 id 保留原有评分
+    const dishes = (m.dishes || []).map(d => {
+      const prev = (old.dishes || []).find(x => x.id === d.id);
+      return { id: d.id || uid(), name: d.name.trim(), reviews: prev ? prev.reviews : [] };
+    });
+    await this.put({ ...old, ...m, dishes });
+  },
+  async joinMeal(id){
+    const m = await this.get(id); if (!m) return;
+    if (!(m.reviews || []).some(r => r.userId === LOCAL_USER)){
+      m.reviews = (m.reviews || []).concat([{ userId: LOCAL_USER, name: "我", rating: null, comment: "", createdAt: Date.now() }]);
+    }
+    await this.put(m);
+  },
+  async saveMyReview(id, rating, comment, dishRatings){
+    const m = await this.get(id); if (!m) return;
+    m.reviews = m.reviews || [];
+    let mine = m.reviews.find(r => r.userId === LOCAL_USER);
+    if (!mine){ mine = { userId: LOCAL_USER, name: "我", rating: null, comment: "" }; m.reviews.push(mine); }
+    mine.rating = rating; mine.comment = comment || "";
+    for (const d of m.dishes || []){
+      const r = (dishRatings || []).find(x => x.dishId === d.id);
+      d.reviews = (d.reviews || []).filter(x => x.userId !== LOCAL_USER);
+      if (r && r.rating > 0) d.reviews.push({ userId: LOCAL_USER, name: "我", rating: r.rating, note: r.note || "" });
+    }
+    await this.put(m);
+  },
+  async deleteMeal(id){
+    const m = await this.get(id);
     if (m) for (const pid of (m.photoIds || [])) await this.delPhoto(pid);
     if (useIDB) return idbReq("meals", "readwrite", s => s.delete(id));
     const d = lsRead(); d.meals = d.meals.filter(x => x.id !== id); lsWrite(d);
@@ -347,18 +443,33 @@ const DB = {
     return this.mode;
   },
 
-  async allMeals(){ return this.mode === "cloud" ? Cloud.listMeals() : Local.allMeals(); },
-  async saveMeal(m, newPhotos, removed){
-    if (this.mode === "cloud") return Cloud.saveMeal(m, newPhotos, removed);
-    return Local.saveMeal(m, newPhotos, removed);
+  isCloud(){ return this.mode === "cloud"; },
+  async allMeals(){ return this.isCloud() ? Cloud.listMeals() : Local.allMeals(); },
+  async createMeal(m, photos){
+    return this.isCloud() ? Cloud.createMeal(m, photos) : Local.createMeal(m, photos);
   },
-  async delMeal(id){
-    if (this.mode === "cloud") return Cloud.deleteMeal(id);
-    return Local.delMeal(id);
+  async updateMeal(m, photos, removed){
+    return this.isCloud() ? Cloud.updateMeal(m, photos, removed) : Local.updateMeal(m, photos, removed);
   },
-  async photoURL(id){ return this.mode === "cloud" ? Cloud.photoURL(id) : Local.photoURL(id); },
-  async photoBlob(id){ return this.mode === "cloud" ? Cloud.photoBlob(id) : Local.photoBlob(id); },
-  revoke(id){ if (this.mode !== "cloud") Local.revoke(id); }
+  async deleteMeal(id){
+    return this.isCloud() ? Cloud.deleteMeal(id) : Local.deleteMeal(id);
+  },
+  async joinMeal(id){
+    return this.isCloud() ? Cloud.joinMeal(id) : Local.joinMeal(id);
+  },
+  async saveMyReview(id, rating, comment, dishRatings){
+    return this.isCloud()
+      ? Cloud.saveMyReview(id, rating, comment, dishRatings)
+      : Local.saveMyReview(id, rating, comment, dishRatings);
+  },
+  async photoURL(id){ return this.isCloud() ? Cloud.photoURL(id) : Local.photoURL(id); },
+  async photoBlob(id){ return this.isCloud() ? Cloud.photoBlob(id) : Local.photoBlob(id); },
+  revoke(id){ if (!this.isCloud()) Local.revoke(id); },
+  myName(){ return this.isCloud() ? Cloud.myName() : "我"; },
+  async reloadMeal(id){
+    const all = await this.allMeals();
+    return all.find(x => x.id === id) || null;
+  }
 };
 
 /* =========================================================
@@ -417,10 +528,11 @@ async function compressImage(file, maxSide = 1280, quality = 0.72){
    ========================================================= */
 const state = {
   meals: [], tab: "list", q: "",
-  draft: null,            // 表单草稿
+  draft: null,            // 记一顿 / 编辑表单
   draftNewPhotos: [],     // [{tmp, blob, url}]
   draftRemove: [],        // 已删的旧照片 id
   detailId: null,
+  reviewDraft: null,      // 详情页里「我的评分」草稿
   _urls: new Map()
 };
 
@@ -485,22 +597,23 @@ async function paintList(){
 
   let html = `<div class="list">`;
   for (const m of meals){
-    const dishes = m.dishes || [];
-    const chips = dishes.slice(0, 8).map(d => {
-      const low = Number(d.rating) <= 2 && Number(d.rating) > 0;
-      return `<span class="chip ${low ? "low" : ""}"><b>${esc(d.name || "未命名")}</b>${
-        d.rating ? `<span class="s">${"★".repeat(Math.round(d.rating))}</span>` : ""
-      }</span>`;
-    }).join("");
+    const scored = (m.dishes || []).filter(d => d.avg > 0).slice(0, 6);
+    const chips = scored.map(d =>
+      `<span class="chip ${d.avg <= 2 ? "low" : ""}"><b>${esc(d.name)}</b><span class="s">${d.avg.toFixed(1)}</span></span>`
+    ).join("");
+    const comments = (m.reviews || []).filter(r => (r.comment || "").trim());
+    const last = comments[comments.length - 1];
     html += `
       <div class="card" data-action="detail" data-id="${m.id}">
         <div class="card-top">
           <span class="meta">${esc(m.date)} · ${esc(m.mealType || "")}</span>
-          ${starsView(m.rating)}
+          ${m.count
+            ? `<span class="score">${starsView(m.avg)}<b>${m.avg.toFixed(1)}</b><em>${m.count} 人</em></span>`
+            : `<span class="meta">还没人打分</span>`}
         </div>
         <h3>${esc(m.restaurant || "（没写店名）")}</h3>
         ${chips ? `<div class="chips">${chips}</div>` : ""}
-        ${m.note ? `<p class="note">${esc(m.note)}</p>` : ""}
+        ${last ? `<p class="note">${esc(last.comment)}<span style="color:#b3a898"> — ${esc(last.name)}</span></p>` : ""}
         <div class="thumbs" data-thumbs="${m.id}"></div>
       </div>`;
   }
@@ -530,36 +643,135 @@ function setFoot(){
 /* =========================================================
    详情
    ========================================================= */
+/* =========================================================
+   详情（一餐多人）
+   ========================================================= */
+function myId(){ return DB.isCloud() ? Cloud.userId() : LOCAL_USER; }
+
 async function openDetail(id){
-  const m = state.meals.find(x => x.id === id);
-  if (!m) return;
   state.detailId = id;
-  const dishes = m.dishes || [];
-  const dishHTML = dishes.length ? `<div class="detail-dishes">${dishes.map(d => `
-    <div class="drow">
-      <div><div class="n">${esc(d.name || "未命名")}</div>${d.note ? `<div class="t">${esc(d.note)}</div>` : ""}</div>
-      ${starsView(d.rating)}
-    </div>`).join("")}</div>` : `<p class="note">没记菜。</p>`;
+  state.reviewDraft = null;
+  await renderDetail();
+  showOverlay(true);
+}
+
+function startReview(m){
+  const me = myId();
+  state.reviewDraft = {
+    rating: m.myRating || 4,
+    comment: m.myComment || "",
+    dishes: (m.dishes || []).map(d => {
+      const mine = (d.reviews || []).find(r => r.userId === me);
+      return { dishId: d.id, rating: mine ? mine.rating : 0, note: mine ? (mine.note || "") : "" };
+    })
+  };
+  renderDetail();
+}
+
+async function saveReview(){
+  const m = state.meals.find(x => x.id === state.detailId);
+  const d = state.reviewDraft;
+  if (!m || !d) return;
+  const btn = document.querySelector('[data-action="save-review"]');
+  if (btn){ btn.disabled = true; btn.textContent = "保存中…"; }
+  try {
+    await DB.saveMyReview(m.id, d.rating, d.comment, d.dishes);
+    await refreshMeals();
+    state.reviewDraft = null;
+    await renderDetail();
+    paintList();
+    toast("已保存我的评价");
+  } catch(e){
+    console.error(e);
+    DB.lastError = "保存评价失败：" + e.message;
+    toast(DB.lastError, 6000);
+    if (btn){ btn.disabled = false; btn.textContent = "保存我的评价"; }
+  }
+}
+
+async function refreshMeals(){
+  try { state.meals = await DB.allMeals(); } catch(e){ console.warn(e); }
+}
+
+async function renderDetail(){
+  const m = state.meals.find(x => x.id === state.detailId);
+  if (!m) return;
+  const me = myId();
+  const draft = state.reviewDraft;
+
+  const dishRows = (m.dishes || []).map((dish, i) => {
+    const rd = draft ? draft.dishes.find(x => x.dishId === dish.id) : null;
+    const mine = (dish.reviews || []).find(r => r.userId === me);
+    const score = dish.count
+      ? `<span class="dishavg">${"★".repeat(Math.round(dish.avg))}<span class="off">${"★".repeat(5 - Math.round(dish.avg))}</span> ${dish.avg.toFixed(1)}<em>${dish.count}人</em></span>`
+      : `<span class="dishavg dim">还没人评</span>`;
+    return `
+      <div class="dishrow">
+        <div class="dishline"><span class="n">${esc(dish.name)}</span>${score}</div>
+        ${draft ? `<div class="dishmine">${starsInput(rd ? rd.rating : 0, "dish-review", i, "sm")}
+          <input class="inp tiny" data-field="dish-review-note" data-idx="${i}" value="${esc(rd ? rd.note : "")}" placeholder="这道菜怎么样"></div>` : ""}
+      </div>`;
+  }).join("");
+
+  const reviewList = (m.reviews || [])
+    .filter(r => r.comment || r.rating)
+    .map(r => `
+      <div class="review">
+        <div class="rhead"><span class="who">${esc(r.name)}</span>${r.rating ? starsView(r.rating) : `<span class="dim">没打分</span>`}</div>
+        ${r.comment ? `<p class="rtext">${esc(r.comment)}</p>` : ""}
+      </div>`).join("");
+
+  let myBlock = "";
+  if (draft){
+    myBlock = `
+      <div class="mybox">
+        <div class="mylabel">我的评分</div>
+        ${starsInput(draft.rating, "review", undefined, "")}
+        <textarea class="inp" data-field="review-comment" placeholder="这顿怎么样？环境、价格、值不值得再来">${esc(draft.comment)}</textarea>
+        <div class="detail-actions">
+          <button class="btn ghost" style="flex:1" data-action="cancel-review">取消</button>
+          <button class="btn" style="flex:2" data-action="save-review">保存我的评价</button>
+        </div>
+      </div>`;
+  } else if (!m.joined){
+    myBlock = `<button class="btn block" data-action="join-meal" data-id="${m.id}">我也吃了，去打分</button>`;
+  } else if (!m.myRating){
+    myBlock = `<button class="btn block" data-action="start-review">给这一餐打分</button>`;
+  } else {
+    myBlock = `<button class="btn ghost block" data-action="start-review">修改我的评价</button>`;
+  }
 
   $("#sheet").innerHTML = `
     <div class="sheet-head"><h2>${esc(m.restaurant || "（没写店名）")}</h2><button class="x" data-action="close">✕</button></div>
-    <div class="meta" style="display:flex;justify-content:space-between;align-items:center">
-      <span>${esc(m.date)} · ${esc(m.mealType || "")}</span>${starsView(m.rating)}
+    <div class="meta">${esc(m.date)} · ${esc(m.mealType || "")} · ${m.people} 人吃了</div>
+    <div class="bigscore">
+      ${m.count
+        ? `${starsView(m.avg)}<b>${m.avg.toFixed(1)}</b><span>${m.count} 人打分</span>`
+        : `<span class="dim">还没有人打分</span>`}
     </div>
-    ${m.note ? `<p class="note" style="margin-top:10px">${esc(m.note)}</p>` : ""}
+    ${m.note ? `<p class="note">${esc(m.note)}</p>` : ""}
     <div class="detail-photos" id="detail-photos"></div>
-    ${dishHTML}
-    <div class="detail-actions">
-      <button class="btn ghost" style="flex:1" data-action="edit" data-id="${m.id}">编辑</button>
+
+    ${(m.dishes || []).length ? `<div class="sechead">菜单</div><div class="dishlist">${dishRows}</div>` : ""}
+
+    <div class="sechead">大家怎么说</div>
+    ${reviewList || `<p class="dim" style="margin:6px 0 0">还没有人评价</p>`}
+
+    <div class="sechead">我</div>
+    ${myBlock}
+
+    ${m.isMine ? `<div class="detail-actions" style="margin-top:14px">
+      <button class="btn ghost" style="flex:1" data-action="edit" data-id="${m.id}">编辑这一餐</button>
       <button class="btn danger" style="flex:1" data-action="delete-meal" data-id="${m.id}">删除</button>
-    </div>`;
-  showOverlay(true);
+    </div>` : ""}`;
 
   const box = $("#detail-photos");
-  const urls = await Promise.all((m.photoIds || []).map(photoURL));
-  const ok = urls.filter(Boolean);
-  box.innerHTML = ok.length ? ok.map(u => `<img src="${u}">`).join("") : "";
-  if (!ok.length) box.remove();
+  if (box){
+    const urls = await Promise.all((m.photoIds || []).map(photoURL));
+    const ok = urls.filter(Boolean);
+    box.innerHTML = ok.length ? ok.map(u => `<img src="${u}">`).join("") : "";
+    if (!ok.length) box.remove();
+  }
 }
 
 /* =========================================================
@@ -568,23 +780,27 @@ async function openDetail(id){
 function newDraft(){
   return {
     id: null, restaurant: "", date: todayISO(), mealType: "晚餐",
-    rating: 4, note: "", dishes: [], photoIds: [], createdAt: 0
+    note: "", dishes: [], photoIds: [], createdAt: 0,
+    myRating: 4, myComment: ""
   };
 }
 async function openForm(id){
   if (id){
     const m = state.meals.find(x => x.id === id);
     state.draft = JSON.parse(JSON.stringify(m));
+    // 编辑时只带走菜单名字和 id，评分留在详情页改
+    state.draft.dishes = (m.dishes || []).map(d => ({ id: d.id, name: d.name }));
+    state.draft.myRating = 0;
+    state.draft.myComment = "";
   } else {
     state.draft = newDraft();
   }
-  // 兼容外部导入的残缺数据
   const d = state.draft;
   if (!Array.isArray(d.dishes)) d.dishes = [];
   if (!Array.isArray(d.photoIds)) d.photoIds = [];
   if (!d.date) d.date = todayISO();
   if (!d.mealType) d.mealType = "晚餐";
-  if (!d.rating) d.rating = 3;
+  if (!d.myRating) d.myRating = 4;
 
   state.draftNewPhotos = [];
   state.draftRemove = [];
@@ -595,16 +811,13 @@ async function openForm(id){
 async function renderForm(){
   const d = state.draft;
   if (!d) return;
+  const isNew = !d.id;
 
   const dishRows = d.dishes.map((dish, i) => `
     <div class="dish-row">
       <div class="dish-line">
         <input class="inp" data-field="dish-name" data-idx="${i}" value="${esc(dish.name)}" placeholder="菜名，如 蒜香排骨">
         <button class="icon-btn" data-action="remove-dish" data-idx="${i}">✕</button>
-      </div>
-      <div class="dish-sub">
-        ${starsInput(dish.rating, "dish", i, "sm")}
-        <input class="inp" data-field="dish-note" data-idx="${i}" value="${esc(dish.note || "")}" placeholder="好吃吗？一句话">
       </div>
     </div>`).join("");
 
@@ -618,7 +831,7 @@ async function renderForm(){
     `<div class="p"><img src="${p.url}"><button class="del" data-action="remove-tmp" data-tmp="${p.tmp}">✕</button></div>`).join("");
 
   $("#sheet").innerHTML = `
-    <div class="sheet-head"><h2>${d.id ? "编辑记录" : "记一顿"}</h2><button class="x" data-action="close">✕</button></div>
+    <div class="sheet-head"><h2>${isNew ? "记一顿" : "编辑这一餐"}</h2><button class="x" data-action="close">✕</button></div>
 
     <div class="field">
       <label>店名</label>
@@ -633,19 +846,22 @@ async function renderForm(){
     </div>
 
     <div class="field">
-      <label>整体评分</label>
-      ${starsInput(d.rating, "meal")}
-    </div>
-
-    <div class="field">
-      <label>点了什么（每道菜单独打分，方便以后回顾）</label>
+      <label>菜单（这顿吃了哪些菜，大家都会给它们打分）</label>
       ${dishRows}
       <button class="btn ghost block" data-action="add-dish" style="margin-top:4px">＋ 添加一道菜</button>
     </div>
 
+    ${isNew ? `
     <div class="field">
-      <label>备注</label>
-      <textarea class="inp" data-field="note" placeholder="环境、价格、值不值得再来…">${esc(d.note)}</textarea>
+      <label>我的评分</label>
+      ${starsInput(d.myRating, "meal")}
+      <textarea class="inp" data-field="my-comment" placeholder="我这顿吃得怎么样" style="margin-top:8px">${esc(d.myComment)}</textarea>
+      <p class="note" style="font-size:12px;margin-top:6px">保存后这一餐就在空间里了，其他人点「我也吃了」可以补充自己的评分。</p>
+    </div>` : ""}
+
+    <div class="field">
+      <label>这一餐的说明（可选）</label>
+      <textarea class="inp" data-field="note" placeholder="在哪、几个人、人均多少…">${esc(d.note)}</textarea>
     </div>
 
     <div class="field">
@@ -681,6 +897,7 @@ async function onFilesPicked(files){
 
 async function saveDraft(){
   const d = state.draft;
+  const isNew = !d.id;
   if (!d.restaurant.trim() && !d.dishes.length && !state.draftNewPhotos.length){
     toast("至少写个店名或加点菜"); return;
   }
@@ -691,28 +908,26 @@ async function saveDraft(){
   if (btn){ btn.textContent = "保存中…"; btn.disabled = true; }
 
   try {
-    // 新照片先分配 id（云端要用 uuid 当文件名，本机照旧）
     const newPhotos = state.draftNewPhotos.map(p => ({ id: uid(), blob: p.blob }));
     const removed = state.draftRemove.slice();
     const keep = (d.photoIds || []).filter(pid => !removed.includes(pid));
     d.photoIds = keep.concat(newPhotos.map(p => p.id));
-    // 只保留填了菜名的菜：本机模式原本会留下「未命名」的空行，
-    // 云端模式又会把它过滤掉，导致「保存了、刷新后消失」。统一成一样的规则。
+
     const beforeDish = (d.dishes || []).length;
     d.dishes = (d.dishes || []).filter(x => (x.name || "").trim());
     const droppedDish = beforeDish - d.dishes.length;
 
-    if (!d.id){ d.id = uid(); d.createdAt = Date.now(); }
-    await DB.saveMeal(d, newPhotos, removed);
+    if (!d.id) d.id = uid();
+
+    if (isNew) await DB.createMeal(d, newPhotos);
+    else await DB.updateMeal(d, newPhotos, removed);
 
     state.draftNewPhotos.forEach(p => { try { URL.revokeObjectURL(p.url); } catch(e){} });
     removed.forEach(revokePhoto);
 
-    const i = state.meals.findIndex(x => x.id === d.id);
-    if (i >= 0) state.meals[i] = d; else state.meals.push(d);
-
     state.draft = null; state.draftNewPhotos = []; state.draftRemove = [];
     showOverlay(false);
+    await refreshMeals();
     renderCurrentTab();
     toast(droppedDish > 0 ? `已保存（${droppedDish} 道没写菜名的已忽略）` : "已保存", droppedDish > 0 ? 3200 : 1700);
   } catch(e){
@@ -726,9 +941,9 @@ async function saveDraft(){
 async function deleteMeal(id){
   const m = state.meals.find(x => x.id === id);
   if (!m) return;
-  if (!confirm(`删除「${m.restaurant}」这条记录？`)) return;
+  if (!confirm(`删除「${m.restaurant}」这一餐？所有人的评分和评论都会一起删掉。`)) return;
   try {
-    await DB.delMeal(id);
+    await DB.deleteMeal(id);
     (m.photoIds || []).forEach(revokePhoto);
     state.meals = state.meals.filter(x => x.id !== id);
     state.detailId = null;
@@ -751,30 +966,31 @@ function renderStats(){
     setFoot(); return;
   }
 
-  const allDishes = meals.flatMap(m => (m.dishes || []).filter(d => d.rating));
-  const avg = arr => arr.length ? (arr.reduce((a, b) => a + Number(b.rating || 0), 0) / arr.length) : 0;
-
-  // 店铺统计
+  // 店铺：把该店所有餐的所有人评分合起来算
   const byPlace = {};
   meals.forEach(m => {
     const k = (m.restaurant || "").trim() || "（没写店名）";
-    (byPlace[k] || (byPlace[k] = { name: k, n: 0, sum: 0, dates: [] }));
-    byPlace[k].n++; byPlace[k].sum += Number(m.rating || 0); byPlace[k].dates.push(m.date);
+    const p = byPlace[k] || (byPlace[k] = { name: k, meals: 0, sum: 0, n: 0 });
+    p.meals++;
+    (m.reviews || []).forEach(r => { if (r.rating) { p.sum += r.rating; p.n++; } });
   });
   const places = Object.values(byPlace)
-    .map(p => ({ ...p, avg: p.sum / p.n }))
+    .map(p => ({ name: p.name, n: p.meals, avg: p.n ? p.sum / p.n : 0, votes: p.n }))
     .sort((a, b) => b.avg - a.avg || b.n - a.n);
 
-  // 菜品榜
+  // 菜品：同名菜合并，按每条评价加权
   const byDish = {};
-  allDishes.forEach(d => {
-    const k = (d.name || "").trim(); if (!k) return;
-    (byDish[k] || (byDish[k] = { name: k, n: 0, sum: 0 }));
-    byDish[k].n++; byDish[k].sum += Number(d.rating);
-  });
-  const dishes = Object.values(byDish).map(d => ({ ...d, avg: d.sum / d.n }));
+  meals.forEach(m => (m.dishes || []).forEach(d => {
+    const k = (d.name || "").trim(); if (!k || !d.count) return;
+    const x = byDish[k] || (byDish[k] = { name: k, sum: 0, n: 0, meals: 0 });
+    x.sum += d.avg * d.count; x.n += d.count; x.meals++;
+  }));
+  const dishes = Object.values(byDish).map(d => ({ name: d.name, n: d.meals, avg: d.sum / d.n }));
   const best = dishes.slice().sort((a, b) => b.avg - a.avg || b.n - a.n).slice(0, 8);
   const worst = dishes.filter(d => d.avg <= 2.5).sort((a, b) => a.avg - b.avg).slice(0, 5);
+
+  const scored = meals.filter(m => m.count > 0);
+  const overall = scored.length ? scored.reduce((a, m) => a + m.avg, 0) / scored.length : 0;
 
   const rk = list => list.map((x, i) => `
     <div class="rk"><span class="idx">${i + 1}</span><span class="nm">${esc(x.name)}${
@@ -786,11 +1002,11 @@ function renderStats(){
     <div class="stat-grid">
       <div class="stat"><div class="k">吃了多少顿</div><div class="v">${meals.length}</div></div>
       <div class="stat"><div class="k">去过几家店</div><div class="v">${places.length}</div></div>
-      <div class="stat"><div class="k">记过几道菜</div><div class="v">${dishes.reduce((a, b) => a + b.n, 0)}</div></div>
-      <div class="stat"><div class="k">平均评分</div><div class="v">${avg(meals.map(m => ({ rating: m.rating }))).toFixed(1)}</div></div>
+      <div class="stat"><div class="k">记过几道菜</div><div class="v">${meals.reduce((a, m) => a + (m.dishes || []).length, 0)}</div></div>
+      <div class="stat"><div class="k">平均评分</div><div class="v">${overall ? overall.toFixed(1) : "—"}</div></div>
     </div>
 
-    <div class="rank"><h3>店铺排行（按平均分）</h3>${rk(places.slice(0, 10))}</div>
+    <div class="rank"><h3>店铺排行（按大家给的分数）</h3>${rk(places.slice(0, 10)) || `<p class="dim">还没有评分</p>`}</div>
     ${best.length ? `<div class="rank"><h3>值得再点的菜</h3>${rk(best)}</div>` : ""}
     ${worst.length ? `<div class="rank"><h3>踩雷清单</h3>${rk(worst)}</div>` : ""}
 
@@ -834,7 +1050,7 @@ async function importJSON(file){
   let data;
   try { data = JSON.parse(text); } catch(e){ return toast("文件不是有效的 JSON"); }
   if (!Array.isArray(data.meals)) return toast("格式不对：缺 meals");
-  const ok = confirm(`将导入 ${data.meals.length} 条记录，追加到现有数据（相同 id 会覆盖）。继续？`);
+  const ok = confirm(`将导入 ${data.meals.length} 条记录。别人的评分没法跟着搬（权限不允许），只导入属于你自己的评分。继续？`);
   if (!ok) return;
   toast("导入中…");
   try {
@@ -846,11 +1062,21 @@ async function importJSON(file){
         const blob = await (await fetch(dataUrl)).blob();
         newPhotos.push({ id: pid, blob });
       }
-      await DB.saveMeal(m, newPhotos, []);
-      const i = state.meals.findIndex(x => x.id === m.id);
-      if (i >= 0) state.meals[i] = m; else state.meals.push(m);
+      const draft = {
+        id: uid(),
+        restaurant: m.restaurant || "（没写店名）",
+        date: m.date || todayISO(),
+        mealType: m.mealType || "晚餐",
+        note: m.note || "",
+        dishes: (m.dishes || []).filter(d => (d.name || "").trim()).map(d => ({ name: d.name.trim() })),
+        photoIds: [],
+        myRating: m.myRating || m.rating || 4,
+        myComment: m.myComment || ""
+      };
+      await DB.createMeal(draft, newPhotos);
     }
     state._urls = new Map();
+    await refreshMeals();
     renderCurrentTab();
     toast("导入完成");
   } catch(e){
@@ -863,20 +1089,18 @@ async function importJSON(file){
    示例数据
    ========================================================= */
 async function seed(){
-  const now = Date.now();
   const samples = [
-    { restaurant: "巷口牛肉面", date: offsetDate(-2), mealType: "午餐", rating: 5, note: "汤头很浓，老板会问你加不加辣。",
-      dishes: [{ name: "红烧牛肉面", rating: 5, note: "肉软，面有嚼劲" }, { name: "卤蛋", rating: 3, note: "普通" }] },
-    { restaurant: "炭火烤肉·三号店", date: offsetDate(-9), mealType: "晚餐", rating: 4, note: "人均 120，人多要排队。",
-      dishes: [{ name: "牛舌", rating: 5, note: "薄切，烤 20 秒就能吃" }, { name: "五花肉", rating: 2, note: "太厚，烤老了" }, { name: "冷面", rating: 4, note: "解腻" }] },
-    { restaurant: "楼下沙县", date: offsetDate(-15), mealType: "早餐", rating: 3, note: "",
-      dishes: [{ name: "蒸饺", rating: 3, note: "就这样" }, { name: "拌面", rating: 2, note: "花生酱放太多，糊嘴" }] }
+    { restaurant: "巷口牛肉面", date: offsetDate(-2), mealType: "午餐", myRating: 5, myComment: "汤头很浓，老板会问你加不加辣。",
+      dishes: [{ name: "红烧牛肉面" }, { name: "卤蛋" }] },
+    { restaurant: "炭火烤肉·三号店", date: offsetDate(-9), mealType: "晚餐", myRating: 4, myComment: "人均 120，人多要排队。",
+      dishes: [{ name: "牛舌" }, { name: "五花肉" }, { name: "冷面" }] },
+    { restaurant: "楼下沙县", date: offsetDate(-15), mealType: "早餐", myRating: 3, myComment: "",
+      dishes: [{ name: "蒸饺" }, { name: "拌面" }] }
   ];
   for (const s of samples){
-    const m = { ...s, id: uid(), photoIds: [], createdAt: now + Math.random() };
-    await DB.saveMeal(m, [], []);
-    state.meals.push(m);
+    await DB.createMeal({ ...s, id: uid(), note: "", photoIds: [] }, []);
   }
+  await refreshMeals();
   renderCurrentTab();
   toast("示例已放入，可以随便改");
 }
@@ -899,7 +1123,7 @@ function closeOverlay(){
     state.draftNewPhotos.forEach(p => { try { URL.revokeObjectURL(p.url); } catch(e){} });
     state.draftNewPhotos = [];
   }
-  state.draft = null; state.draftRemove = []; state.detailId = null;
+  state.draft = null; state.draftRemove = []; state.detailId = null; state.reviewDraft = null;
   showOverlay(false);
   if (!state.meals.length) renderList();
 }
@@ -907,13 +1131,17 @@ function closeOverlay(){
 document.addEventListener("click", async e => {
   /* 星星优先：星点没有 data-action，必须放在前面 */
   const starHit = e.target.closest("[data-star]");
-  if (starHit && state.draft){
+  if (starHit){
     const box = starHit.closest(".stars");
     const v = Number(starHit.dataset.star);
     const scope = box.dataset.scope;
-    if (scope === "meal") state.draft.rating = v;
-    else if (scope === "dish") state.draft.dishes[Number(box.dataset.idx)].rating = v;
-    return renderForm();
+    const idx = box.dataset.idx !== undefined ? Number(box.dataset.idx) : -1;
+    // 就地改星星和 state，不整页重绘（避免输入框失焦）
+    [...box.querySelectorAll(".star")].forEach((st, i) => st.classList.toggle("on", i < v));
+    if (scope === "meal" && state.draft) state.draft.myRating = v;
+    else if (scope === "review" && state.reviewDraft) state.reviewDraft.rating = v;
+    else if (scope === "dish-review" && state.reviewDraft) state.reviewDraft.dishes[idx].rating = v;
+    return;
   }
 
   const el = e.target.closest("[data-action]");
@@ -925,6 +1153,33 @@ document.addEventListener("click", async e => {
 
   if (a === "seed") return seed();
   if (a === "close") return closeOverlay();
+
+  if (a === "join-meal"){
+    try {
+      el.disabled = true; el.textContent = "记录中…";
+      await DB.joinMeal(id);
+      await refreshMeals();
+      const m = state.meals.find(x => x.id === id);
+      if (m) startReview(m);
+    } catch(err){
+      console.error(err);
+      DB.lastError = "加入失败：" + err.message;
+      toast(DB.lastError, 6000);
+      if (el.isConnected){ el.disabled = false; el.textContent = "我也吃了，去打分"; }
+    }
+    return;
+  }
+  if (a === "start-review"){
+    const m = state.meals.find(x => x.id === state.detailId);
+    if (m) startReview(m);
+    return;
+  }
+  if (a === "cancel-review"){
+    state.reviewDraft = null;
+    return renderDetail();
+  }
+  if (a === "save-review") return saveReview();
+
   if (a === "open-settings") return openSettings();
   if (a === "cloud-save"){
     const url = ($("#cfg-url") || {}).value || "";
@@ -1036,12 +1291,23 @@ document.addEventListener("click", async e => {
 // 输入绑定
 document.addEventListener("input", e => {
   if (e.target.id === "q"){ state.q = e.target.value; paintList(); return; }
+
   const el = e.target.closest("[data-field]");
-  if (!el || !state.draft) return;
+  if (!el) return;
   const f = el.dataset.field, v = el.value;
-  if (f === "dish-name") state.draft.dishes[Number(el.dataset.idx)].name = v;
-  else if (f === "dish-note") state.draft.dishes[Number(el.dataset.idx)].note = v;
-  else if (f === "restaurant" || f === "note" || f === "date") state.draft[f] = v;
+  const idx = el.dataset.idx !== undefined ? Number(el.dataset.idx) : -1;
+
+  // 详情页的「我的评价」草稿
+  if (state.reviewDraft){
+    if (f === "review-comment"){ state.reviewDraft.comment = v; return; }
+    if (f === "dish-review-note" && idx >= 0){ state.reviewDraft.dishes[idx].note = v; return; }
+  }
+
+  // 记一顿 / 编辑表单
+  if (!state.draft) return;
+  if (f === "restaurant" || f === "note" || f === "date") state.draft[f] = v;
+  else if (f === "my-comment") state.draft.myComment = v;
+  else if (f === "dish-name" && idx >= 0) state.draft.dishes[idx].name = v;
 });
 document.addEventListener("change", e => {
   const el = e.target.closest("[data-field]");

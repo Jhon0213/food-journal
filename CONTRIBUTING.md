@@ -62,3 +62,10 @@ node build.mjs           # 生成 dist/index.html
 | `test-cloud.mjs` | 云端模式（假后端） | 不会 |
 | `test-real.mjs` | 真后端端到端 | **会建测试账号**，跑完要执行 `cleanup-test.sql` |
 | `test-join.mjs` | 两个账号 + 邀请码共享 | **同上** |
+
+## 七、数据结构变更（v2 之后）
+
+一轮饭的评分模型：`meals`（共享） → `meal_reviews`（每人一条） → `dish_reviews`（每人对每道菜）。
+平均分一律**读的时候现算**，不要往表里加 `avg` 字段，否则并发写入会打架。
+
+要加字段时按这个顺序：`schema.sql` 加列（带 default）→ 控制台跑一遍 → `cloud.js` 的 select/save 各加一处 → 界面加输入 → `node build.mjs` + 三套测试。

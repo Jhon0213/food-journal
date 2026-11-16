@@ -1,0 +1,1 @@
+select (select count(*) from public.meals) as meals, (select count(*) from public.dishes) as dishes, (select count(*) from public.meal_reviews) as reviews, (select count(*) from public.dish_reviews) as dish_reviews, (select string_agg(reviewer_name || '=' || coalesce(rating::text,'null') || '|' || left(coalesce(comment,''),24), ' ; ') from public.meal_reviews) as detail;
