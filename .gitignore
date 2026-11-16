@@ -1,0 +1,12 @@
+# 构建产物（由 node build.mjs 生成，不进版本库）
+dist/
+
+# 测试截图
+shots/
+
+# 依赖
+node_modules/
+
+*.log
+.DS_Store
+Thumbs.db

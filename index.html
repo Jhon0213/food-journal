@@ -1,0 +1,1218 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#faf7f2">
+<title>饭记 · 我们去哪儿吃</title>
+<style>
+  :root{
+    --bg:#faf7f2; --card:#ffffff; --ink:#2b2622; --ink2:#7c7268; --line:#eae2d6;
+    --accent:#e2683c; --accent-soft:#fbeade; --good:#2f9e6e; --bad:#c0392b;
+    --radius:16px; --shadow:0 2px 10px rgba(80,60,40,.06);
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;padding:0}
+  body{
+    background:var(--bg); color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    font-size:16px; line-height:1.5;
+    padding-bottom:calc(96px + env(safe-area-inset-bottom));
+  }
+  .wrap{max-width:640px;margin:0 auto;padding:0 16px}
+
+  /* ---------- header ---------- */
+  header{padding:22px 0 10px}
+  .brand{display:flex;align-items:baseline;gap:10px}
+  .brand h1{font-size:24px;margin:0;letter-spacing:1px}
+  .brand span{font-size:12px;color:var(--ink2)}
+  .gear{
+    margin-left:auto;border:1px solid var(--line);background:#fff;border-radius:999px;
+    width:34px;height:34px;font-size:15px;color:var(--ink2);cursor:pointer;line-height:1;
+  }
+  .gear:active{opacity:.7}
+  .kv{display:flex;justify-content:space-between;gap:10px;padding:9px 0;border-bottom:1px solid var(--line);font-size:14px}
+  .kv:last-child{border-bottom:0}
+  .kv .k{color:var(--ink2)}
+  .kv .v{font-weight:600;text-align:right;word-break:break-all}
+  .code{font-family:ui-monospace,Consolas,monospace;letter-spacing:2px;font-size:17px}
+  .hintline{font-size:12px;color:var(--ink2);margin:8px 0 0;line-height:1.6}
+  .tabs{display:flex;gap:8px;margin-top:14px;background:#fff;border:1px solid var(--line);border-radius:999px;padding:4px}
+  .tabs button{
+    flex:1;border:0;background:transparent;color:var(--ink2);font-size:15px;
+    padding:9px 0;border-radius:999px;cursor:pointer;font-family:inherit
+  }
+  .tabs button.on{background:var(--accent);color:#fff;font-weight:600}
+
+  /* ---------- search ---------- */
+  .search{margin:14px 0 4px;position:relative}
+  .search input{
+    width:100%;border:1px solid var(--line);background:#fff;border-radius:12px;
+    padding:11px 14px 11px 38px;font-size:15px;font-family:inherit;color:var(--ink);outline:none
+  }
+  .search input:focus{border-color:var(--accent)}
+  .search .ico{position:absolute;left:13px;top:11px;color:var(--ink2);font-size:15px}
+
+  /* ---------- cards ---------- */
+  .list{display:flex;flex-direction:column;gap:12px;margin:14px 0}
+  .card{
+    background:var(--card);border-radius:var(--radius);box-shadow:var(--shadow);
+    border:1px solid var(--line);padding:14px;cursor:pointer;transition:transform .08s
+  }
+  .card:active{transform:scale(.995)}
+  .card-top{display:flex;justify-content:space-between;align-items:center;gap:8px}
+  .meta{font-size:12px;color:var(--ink2)}
+  .card h3{margin:4px 0 0;font-size:18px;font-weight:650;line-height:1.3}
+  .card .note{margin:6px 0 0;font-size:13px;color:var(--ink2);white-space:pre-wrap}
+  .stars{display:inline-flex;gap:2px;font-size:15px;letter-spacing:1px;user-select:none}
+  .stars .star{color:#ddd5c8;cursor:default}
+  .stars .star.on{color:#f0a828}
+  .stars.input .star{cursor:pointer;font-size:22px}
+  .stars.input.sm .star{font-size:18px}
+
+  .chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+  .chip{
+    display:inline-flex;align-items:center;gap:5px;background:#f6f1e8;border-radius:999px;
+    padding:4px 10px;font-size:13px;color:#5c5349
+  }
+  .chip b{font-weight:600;color:var(--ink)}
+  .chip .s{color:#f0a828;font-size:11px;letter-spacing:0}
+  .chip.low{background:#fdeceb}
+  .chip.low b{color:var(--bad)}
+
+  .thumbs{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:10px}
+  .thumbs img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:10px;background:#f1ece4;display:block}
+  .thumbs .more{display:flex;align-items:center;justify-content:center;aspect-ratio:1;border-radius:10px;background:#f1ece4;color:var(--ink2);font-size:13px}
+
+  /* ---------- empty / misc ---------- */
+  .empty{text-align:center;padding:56px 20px;color:var(--ink2)}
+  .empty .big{font-size:44px;margin-bottom:8px}
+  .empty p{margin:6px 0;font-size:14px}
+  .btn{
+    border:0;border-radius:12px;padding:12px 18px;font-size:15px;font-family:inherit;
+    cursor:pointer;background:var(--accent);color:#fff;font-weight:600
+  }
+  .btn.ghost{background:#fff;color:var(--ink);border:1px solid var(--line);font-weight:500}
+  .btn.danger{background:#fff;color:var(--bad);border:1px solid #f0cfcb}
+  .btn.block{width:100%}
+  .btn:active{opacity:.85}
+
+  /* ---------- fab ---------- */
+  .fab{
+    position:fixed;right:max(18px,calc(50% - 320px + 18px));bottom:calc(22px + env(safe-area-inset-bottom));
+    display:inline-flex;align-items:center;gap:6px;
+    background:var(--accent);color:#fff;border:0;border-radius:999px;
+    padding:14px 20px;font-size:16px;font-weight:600;font-family:inherit;
+    box-shadow:0 6px 20px rgba(226,104,60,.35);cursor:pointer;z-index:20
+  }
+  .fab:active{opacity:.9}
+
+  /* ---------- overlay ---------- */
+  .overlay{
+    position:fixed;inset:0;background:rgba(40,30,20,.35);z-index:40;
+    display:flex;align-items:flex-end;justify-content:center;
+    opacity:0;pointer-events:none;transition:opacity .18s
+  }
+  .overlay.show{opacity:1;pointer-events:auto}
+  .sheet{
+    width:100%;max-width:640px;max-height:92vh;overflow-y:auto;background:var(--bg);
+    border-radius:20px 20px 0 0;padding:16px 16px calc(24px + env(safe-area-inset-bottom));
+    transform:translateY(24px);transition:transform .2s;box-shadow:0 -8px 30px rgba(0,0,0,.12)
+  }
+  .overlay.show .sheet{transform:translateY(0)}
+  .sheet-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+  .sheet-head h2{margin:0;font-size:18px}
+  .x{border:0;background:transparent;font-size:20px;color:var(--ink2);cursor:pointer;padding:6px 10px;border-radius:10px}
+  .x:hover{background:#f1ece4}
+
+  .field{margin-bottom:14px}
+  .field > label{display:block;font-size:13px;color:var(--ink2);margin-bottom:6px}
+  .inp,select,textarea{
+    width:100%;border:1px solid var(--line);background:#fff;border-radius:12px;
+    padding:11px 12px;font-size:15px;font-family:inherit;color:var(--ink);outline:none
+  }
+  .inp:focus,select:focus,textarea:focus{border-color:var(--accent)}
+  textarea{resize:vertical;min-height:64px}
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .row3{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+
+  .dish-row{
+    border:1px solid var(--line);background:#fff;border-radius:14px;padding:10px;margin-bottom:8px
+  }
+  .dish-line{display:flex;gap:8px;align-items:center}
+  .dish-line .inp{border:0;border-bottom:1px solid var(--line);border-radius:0;padding:6px 2px;background:transparent}
+  .dish-line .inp:focus{border-bottom-color:var(--accent)}
+  .dish-sub{display:flex;gap:8px;align-items:center;margin-top:8px}
+  .dish-sub .inp{border:0;padding:5px 2px;background:transparent;font-size:13px}
+  .icon-btn{border:0;background:#f6f1e8;color:var(--ink2);border-radius:8px;width:30px;height:30px;flex:none;cursor:pointer;font-size:13px}
+  .icon-btn:active{opacity:.7}
+
+  .photogrid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:8px}
+  .photogrid .p{position:relative}
+  .photogrid img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:12px;display:block;background:#f1ece4}
+  .photogrid .del{
+    position:absolute;top:4px;right:4px;width:24px;height:24px;border-radius:50%;
+    background:rgba(0,0,0,.55);color:#fff;border:0;font-size:12px;cursor:pointer;line-height:1
+  }
+  .addphoto{
+    display:flex;align-items:center;justify-content:center;flex-direction:column;gap:2px;
+    aspect-ratio:1;border:1.5px dashed #d8cdbd;border-radius:12px;color:var(--ink2);
+    background:#fff;cursor:pointer;font-size:12px
+  }
+  .addphoto span:first-child{font-size:22px;line-height:1}
+
+  /* ---------- detail ---------- */
+  .detail-photos{display:grid;grid-template-columns:1fr;gap:8px;margin:10px 0 4px}
+  .detail-photos img{width:100%;border-radius:14px;display:block;background:#f1ece4}
+  .detail-dishes{margin-top:8px}
+  .drow{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--line);gap:10px}
+  .drow:last-child{border-bottom:0}
+  .drow .n{font-weight:600;font-size:15px}
+  .drow .t{font-size:12px;color:var(--ink2);margin-top:2px}
+  .detail-actions{display:flex;gap:10px;margin-top:18px}
+
+  /* ---------- stats ---------- */
+  .stat-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-top:14px}
+  .stat{background:#fff;border:1px solid var(--line);border-radius:14px;padding:14px}
+  .stat .k{font-size:12px;color:var(--ink2)}
+  .stat .v{font-size:24px;font-weight:700;margin-top:2px}
+  .rank{background:#fff;border:1px solid var(--line);border-radius:14px;padding:6px 14px;margin-top:12px}
+  .rank h3{margin:10px 0 4px;font-size:14px;color:var(--ink2);font-weight:600}
+  .rk{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid #f3ece1;font-size:14px}
+  .rk:last-child{border-bottom:0}
+  .rk .idx{width:20px;color:var(--ink2);font-size:12px}
+  .rk .nm{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .rk .sc{color:#f0a828;font-size:12px;letter-spacing:-.5px}
+
+  /* ---------- toast ---------- */
+  #toast{
+    position:fixed;left:50%;bottom:100px;transform:translate(-50%,10px);
+    background:rgba(43,38,34,.92);color:#fff;font-size:13px;padding:9px 16px;border-radius:999px;
+    opacity:0;transition:.2s;pointer-events:none;z-index:60;max-width:80vw;text-align:center
+  }
+  #toast.show{opacity:1;transform:translate(-50%,0)}
+  .foot-hint{text-align:center;color:#b3a898;font-size:12px;margin:22px 0 8px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="brand">
+      <h1>饭记</h1>
+      <span>我们去哪儿吃 · 什么好吃</span>
+      <button class="gear" data-action="open-settings" title="设置">⚙</button>
+    </div>
+    <div class="tabs">
+      <button id="tab-list" class="on" data-tab="list">记录</button>
+      <button id="tab-stats" data-tab="stats">统计</button>
+    </div>
+  </header>
+  <div id="view"></div>
+  <div class="foot-hint" id="foot"></div>
+</div>
+
+<button class="fab" id="fab">＋ 记一顿</button>
+
+<div class="overlay" id="overlay"><div class="sheet" id="sheet"></div></div>
+<div id="toast"></div>
+<input type="file" id="photo-input" accept="image/*" multiple hidden>
+
+<script src="config.js"></script>
+<script src="cloud.js"></script>
+<script>
+"use strict";
+
+/* =========================================================
+   存储层：IndexedDB 优先，不可用时退化到 localStorage
+   ========================================================= */
+const DB_NAME = "foodjournal", DB_VER = 1, LS_KEY = "foodjournal.v1";
+let idb = null, useIDB = false;
+
+function openDB(){
+  return new Promise((res, rej) => {
+    const r = indexedDB.open(DB_NAME, DB_VER);
+    r.onupgradeneeded = e => {
+      const d = e.target.result;
+      if (!d.objectStoreNames.contains("meals")) d.createObjectStore("meals", { keyPath: "id" });
+      if (!d.objectStoreNames.contains("photos")) d.createObjectStore("photos", { keyPath: "id" });
+    };
+    r.onsuccess = () => res(r.result);
+    r.onerror = () => rej(r.error);
+  });
+}
+function idbReq(store, mode, fn){
+  return new Promise((res, rej) => {
+    const t = idb.transaction(store, mode);
+    const s = t.objectStore(store);
+    const rq = fn(s);
+    if (rq) { rq.onsuccess = () => res(rq.result); rq.onerror = () => rej(rq.error); }
+    else { t.oncomplete = () => res(null); t.onerror = () => rej(t.error); }
+  });
+}
+function lsRead(){ try { return JSON.parse(localStorage.getItem(LS_KEY) || "null") || { meals: [], photos: {} }; } catch(e){ return { meals: [], photos: {} }; } }
+function lsWrite(v){ localStorage.setItem(LS_KEY, JSON.stringify(v)); }
+
+/* =========================================================
+   本机存储（默认）：IndexedDB 优先，不可用时退化 localStorage
+   ========================================================= */
+const Local = {
+  async init(){
+    try { idb = await openDB(); useIDB = true; }
+    catch(e){ useIDB = false; console.warn("IndexedDB 不可用，改用 localStorage", e); }
+  },
+  async allMeals(){
+    if (useIDB) return (await idbReq("meals", "readonly", s => s.getAll())) || [];
+    return lsRead().meals;
+  },
+  async saveMeal(m, newPhotos, removed){
+    for (const p of newPhotos) await this.putPhoto(p.id, p.blob);
+    for (const pid of removed || []) await this.delPhoto(pid);
+    if (useIDB) return idbReq("meals", "readwrite", s => s.put(m));
+    const d = lsRead(); const i = d.meals.findIndex(x => x.id === m.id);
+    if (i >= 0) d.meals[i] = m; else d.meals.push(m); lsWrite(d);
+  },
+  async delMeal(id){
+    const m = (await this.allMeals()).find(x => x.id === id);
+    if (m) for (const pid of (m.photoIds || [])) await this.delPhoto(pid);
+    if (useIDB) return idbReq("meals", "readwrite", s => s.delete(id));
+    const d = lsRead(); d.meals = d.meals.filter(x => x.id !== id); lsWrite(d);
+  },
+  async getPhoto(id){
+    if (useIDB) return idbReq("photos", "readonly", s => s.get(id)).then(r => r ? r.blob : null);
+    return lsRead().photos[id] || null;
+  },
+  async putPhoto(id, blob){
+    if (useIDB) return idbReq("photos", "readwrite", s => s.put({ id, blob }));
+    const d = lsRead(); d.photos[id] = blob; lsWrite(d);
+  },
+  async delPhoto(id){
+    if (useIDB) return idbReq("photos", "readwrite", s => s.delete(id));
+    const d = lsRead(); delete d.photos[id]; lsWrite(d);
+  },
+  async photoURL(id){
+    const c = state._urls;
+    if (c.has(id)) return c.get(id);
+    const blob = await this.getPhoto(id);
+    if (!blob) return null;
+    const url = URL.createObjectURL(blob);
+    c.set(id, url);
+    return url;
+  },
+  async photoBlob(id){ return await this.getPhoto(id); },
+  revoke(id){
+    const c = state._urls;
+    if (c.has(id)) { try { URL.revokeObjectURL(c.get(id)); } catch(e){} c.delete(id); }
+  }
+};
+
+/* =========================================================
+   数据门面：本机 / 云端（Supabase）两种模式，界面不感知差别
+   ========================================================= */
+const DB = {
+  mode: "local",     // local | cloud | cloud-no-ws
+  ws: null,
+  cloudError: "",
+  lastError: "",
+
+  async init(){
+    await Local.init();
+    if (Cloud.config() && Cloud.session()){
+      try {
+        await Cloud.ensureFresh();
+        if (!Cloud.session().user) await Cloud.fetchUser();
+        const ws = await Cloud.currentWorkspace();
+        if (ws){ this.mode = "cloud"; this.ws = ws; }
+        else { this.mode = "cloud-no-ws"; }
+      } catch(e){
+        console.warn("云端初始化失败：", e.message);
+        this.cloudError = e.message;
+        this.mode = "local";
+      }
+    }
+    return this.mode;
+  },
+
+  async reconnect(){
+    try {
+      await Cloud.ensureFresh();
+      if (!Cloud.session().user) await Cloud.fetchUser();
+      const ws = await Cloud.currentWorkspace();
+      if (ws){ this.mode = "cloud"; this.ws = ws; }
+      else { this.mode = "cloud-no-ws"; }
+      this.cloudError = "";
+    } catch(e){
+      this.cloudError = e.message;
+      this.mode = "local";
+    }
+    return this.mode;
+  },
+
+  async allMeals(){ return this.mode === "cloud" ? Cloud.listMeals() : Local.allMeals(); },
+  async saveMeal(m, newPhotos, removed){
+    if (this.mode === "cloud") return Cloud.saveMeal(m, newPhotos, removed);
+    return Local.saveMeal(m, newPhotos, removed);
+  },
+  async delMeal(id){
+    if (this.mode === "cloud") return Cloud.deleteMeal(id);
+    return Local.delMeal(id);
+  },
+  async photoURL(id){ return this.mode === "cloud" ? Cloud.photoURL(id) : Local.photoURL(id); },
+  async photoBlob(id){ return this.mode === "cloud" ? Cloud.photoBlob(id) : Local.photoBlob(id); },
+  revoke(id){ if (this.mode !== "cloud") Local.revoke(id); }
+};
+
+/* =========================================================
+   工具
+   ========================================================= */
+const $ = sel => document.querySelector(sel);
+const uid = () => (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2, 12));
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
+const todayISO = () => { const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 10); };
+const MEALTYPES = ["早餐", "午餐", "下午茶", "晚餐", "夜宵"];
+
+function toast(msg, ms){
+  const t = $("#toast"); t.textContent = msg; t.classList.add("show");
+  clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove("show"), ms || 1700);
+}
+function starsView(v){
+  v = Math.round(Number(v) || 0);
+  return `<span class="stars">${[1,2,3,4,5].map(i => `<span class="star ${i <= v ? "on" : ""}">★</span>`).join("")}</span>`;
+}
+function starsInput(value, scope, idx, cls){
+  const v = Math.round(Number(value) || 0);
+  return `<span class="stars input ${cls || ""}" data-scope="${scope}"${idx !== undefined ? ` data-idx="${idx}"` : ""}>${
+    [1,2,3,4,5].map(i => `<span class="star ${i <= v ? "on" : ""}" data-star="${i}">★</span>`).join("")
+  }</span>`;
+}
+async function photoURL(id){ return DB.photoURL(id); }
+function revokePhoto(id){ DB.revoke(id); }
+
+/* 图片压缩：长边 1280，jpeg 0.72 */
+async function compressImage(file, maxSide = 1280, quality = 0.72){
+  let bitmap = null;
+  try { bitmap = await createImageBitmap(file); }
+  catch(e){
+    bitmap = await new Promise((res, rej) => {
+      const img = new Image();
+      img.onload = () => res(img);
+      img.onerror = () => rej(new Error("图片无法解码（可能是 HEIC）"));
+      img.src = URL.createObjectURL(file);
+    });
+  }
+  const w0 = bitmap.width || bitmap.naturalWidth, h0 = bitmap.height || bitmap.naturalHeight;
+  const scale = Math.min(1, maxSide / Math.max(w0, h0));
+  const w = Math.max(1, Math.round(w0 * scale)), h = Math.max(1, Math.round(h0 * scale));
+  const canvas = document.createElement("canvas");
+  canvas.width = w; canvas.height = h;
+  const ctx = canvas.getContext("2d");
+  ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, w, h);
+  ctx.drawImage(bitmap, 0, 0, w, h);
+  if (bitmap.close) bitmap.close();
+  const blob = await new Promise(res => canvas.toBlob(res, "image/jpeg", quality));
+  return blob;
+}
+
+/* =========================================================
+   状态
+   ========================================================= */
+const state = {
+  meals: [], tab: "list", q: "",
+  draft: null,            // 表单草稿
+  draftNewPhotos: [],     // [{tmp, blob, url}]
+  draftRemove: [],        // 已删的旧照片 id
+  detailId: null,
+  _urls: new Map()
+};
+
+function sortedMeals(){
+  return state.meals.slice().sort((a, b) => {
+    if (a.date !== b.date) return a.date < b.date ? 1 : -1;
+    return (b.createdAt || 0) - (a.createdAt || 0);
+  });
+}
+function filteredMeals(){
+  const q = state.q.trim().toLowerCase();
+  const list = sortedMeals();
+  if (!q) return list;
+  return list.filter(m =>
+    (m.restaurant || "").toLowerCase().includes(q) ||
+    (m.note || "").toLowerCase().includes(q) ||
+    (m.dishes || []).some(d => (d.name || "").toLowerCase().includes(q))
+  );
+}
+
+/* =========================================================
+   列表
+   ========================================================= */
+async function renderList(){
+  $("#view").innerHTML = `
+    <div class="search">
+      <span class="ico">🔍</span>
+      <input id="q" type="search" placeholder="搜店名 / 菜名 / 备注" value="${esc(state.q)}">
+    </div>
+    <div id="listbox"></div>`;
+  await paintList();
+  setFoot();
+}
+
+async function paintList(){
+  const meals = filteredMeals();
+  const box = $("#listbox");
+  if (!box) return;
+
+  if (!state.meals.length){
+    const guest = Cloud.config() && !Cloud.session();
+    box.innerHTML = guest
+      ? `<div class="empty">
+          <div class="big">🍜</div>
+          <p>欢迎来饭记。</p>
+          <p>用邮箱登录后，和朋友记同一份吃饭记录。</p>
+          <p style="margin-top:20px"><button class="btn" data-action="open-settings" style="min-width:200px">登录 / 注册</button></p>
+          <p style="margin-top:10px"><button class="btn ghost" data-action="seed">先随便看看（不登录）</button></p>
+        </div>`
+      : `<div class="empty">
+          <div class="big">🍜</div>
+          <p>还没有记录。</p>
+          <p>点右下角「记一顿」，把今天吃的记下来。</p>
+          <p style="margin-top:18px"><button class="btn ghost" data-action="seed">先放几条示例看看</button></p>
+        </div>`;
+    return;
+  }
+  if (!meals.length){
+    box.innerHTML = `<div class="empty"><div class="big">🤔</div><p>没搜到「${esc(state.q)}」</p></div>`;
+    return;
+  }
+
+  let html = `<div class="list">`;
+  for (const m of meals){
+    const dishes = m.dishes || [];
+    const chips = dishes.slice(0, 8).map(d => {
+      const low = Number(d.rating) <= 2 && Number(d.rating) > 0;
+      return `<span class="chip ${low ? "low" : ""}"><b>${esc(d.name || "未命名")}</b>${
+        d.rating ? `<span class="s">${"★".repeat(Math.round(d.rating))}</span>` : ""
+      }</span>`;
+    }).join("");
+    html += `
+      <div class="card" data-action="detail" data-id="${m.id}">
+        <div class="card-top">
+          <span class="meta">${esc(m.date)} · ${esc(m.mealType || "")}</span>
+          ${starsView(m.rating)}
+        </div>
+        <h3>${esc(m.restaurant || "（没写店名）")}</h3>
+        ${chips ? `<div class="chips">${chips}</div>` : ""}
+        ${m.note ? `<p class="note">${esc(m.note)}</p>` : ""}
+        <div class="thumbs" data-thumbs="${m.id}"></div>
+      </div>`;
+  }
+  html += `</div>`;
+  box.innerHTML = html;
+
+  // 异步填缩略图
+  for (const m of meals){
+    const ids = (m.photoIds || []).slice(0, 4);
+    const ph = box.querySelector(`[data-thumbs="${m.id}"]`);
+    if (!ids.length){ if (ph) ph.remove(); continue; }
+    if (!ph) continue;
+    const urls = await Promise.all(ids.map(photoURL));
+    ph.innerHTML = urls.map((u, i) =>
+      u ? `<img src="${u}" alt="照片${i + 1}">` : ``
+    ).join("") + ((m.photoIds || []).length > 4 ? `<div class="more">+${m.photoIds.length - 4}</div>` : "");
+  }
+  setFoot();
+}
+
+function setFoot(){
+  const n = state.meals.length;
+  const where = DB.mode === "cloud" ? ("云端 · " + (DB.ws ? DB.ws.name : "")) : "本机";
+  $("#foot").textContent = n ? `共 ${n} 条记录 · ${where}` : "";
+}
+
+/* =========================================================
+   详情
+   ========================================================= */
+async function openDetail(id){
+  const m = state.meals.find(x => x.id === id);
+  if (!m) return;
+  state.detailId = id;
+  const dishes = m.dishes || [];
+  const dishHTML = dishes.length ? `<div class="detail-dishes">${dishes.map(d => `
+    <div class="drow">
+      <div><div class="n">${esc(d.name || "未命名")}</div>${d.note ? `<div class="t">${esc(d.note)}</div>` : ""}</div>
+      ${starsView(d.rating)}
+    </div>`).join("")}</div>` : `<p class="note">没记菜。</p>`;
+
+  $("#sheet").innerHTML = `
+    <div class="sheet-head"><h2>${esc(m.restaurant || "（没写店名）")}</h2><button class="x" data-action="close">✕</button></div>
+    <div class="meta" style="display:flex;justify-content:space-between;align-items:center">
+      <span>${esc(m.date)} · ${esc(m.mealType || "")}</span>${starsView(m.rating)}
+    </div>
+    ${m.note ? `<p class="note" style="margin-top:10px">${esc(m.note)}</p>` : ""}
+    <div class="detail-photos" id="detail-photos"></div>
+    ${dishHTML}
+    <div class="detail-actions">
+      <button class="btn ghost" style="flex:1" data-action="edit" data-id="${m.id}">编辑</button>
+      <button class="btn danger" style="flex:1" data-action="delete-meal" data-id="${m.id}">删除</button>
+    </div>`;
+  showOverlay(true);
+
+  const box = $("#detail-photos");
+  const urls = await Promise.all((m.photoIds || []).map(photoURL));
+  const ok = urls.filter(Boolean);
+  box.innerHTML = ok.length ? ok.map(u => `<img src="${u}">`).join("") : "";
+  if (!ok.length) box.remove();
+}
+
+/* =========================================================
+   表单
+   ========================================================= */
+function newDraft(){
+  return {
+    id: null, restaurant: "", date: todayISO(), mealType: "晚餐",
+    rating: 4, note: "", dishes: [], photoIds: [], createdAt: 0
+  };
+}
+async function openForm(id){
+  if (id){
+    const m = state.meals.find(x => x.id === id);
+    state.draft = JSON.parse(JSON.stringify(m));
+  } else {
+    state.draft = newDraft();
+  }
+  // 兼容外部导入的残缺数据
+  const d = state.draft;
+  if (!Array.isArray(d.dishes)) d.dishes = [];
+  if (!Array.isArray(d.photoIds)) d.photoIds = [];
+  if (!d.date) d.date = todayISO();
+  if (!d.mealType) d.mealType = "晚餐";
+  if (!d.rating) d.rating = 3;
+
+  state.draftNewPhotos = [];
+  state.draftRemove = [];
+  await renderForm();
+  showOverlay(true);
+}
+
+async function renderForm(){
+  const d = state.draft;
+  if (!d) return;
+
+  const dishRows = d.dishes.map((dish, i) => `
+    <div class="dish-row">
+      <div class="dish-line">
+        <input class="inp" data-field="dish-name" data-idx="${i}" value="${esc(dish.name)}" placeholder="菜名，如 蒜香排骨">
+        <button class="icon-btn" data-action="remove-dish" data-idx="${i}">✕</button>
+      </div>
+      <div class="dish-sub">
+        ${starsInput(dish.rating, "dish", i, "sm")}
+        <input class="inp" data-field="dish-note" data-idx="${i}" value="${esc(dish.note || "")}" placeholder="好吃吗？一句话">
+      </div>
+    </div>`).join("");
+
+  // 已有照片
+  const oldPhotos = (d.photoIds || []).filter(pid => !state.draftRemove.includes(pid));
+  const oldHTML = (await Promise.all(oldPhotos.map(async pid => ({ pid, url: await photoURL(pid) }))))
+    .filter(x => x.url)
+    .map(x => `<div class="p"><img src="${x.url}"><button class="del" data-action="remove-photo" data-pid="${x.pid}">✕</button></div>`).join("");
+
+  const newHTML = state.draftNewPhotos.map(p =>
+    `<div class="p"><img src="${p.url}"><button class="del" data-action="remove-tmp" data-tmp="${p.tmp}">✕</button></div>`).join("");
+
+  $("#sheet").innerHTML = `
+    <div class="sheet-head"><h2>${d.id ? "编辑记录" : "记一顿"}</h2><button class="x" data-action="close">✕</button></div>
+
+    <div class="field">
+      <label>店名</label>
+      <input class="inp" data-field="restaurant" value="${esc(d.restaurant)}" placeholder="如：巷口那家牛肉面">
+    </div>
+
+    <div class="row2 field">
+      <div><label>日期</label><input class="inp" type="date" data-field="date" value="${esc(d.date)}"></div>
+      <div><label>餐次</label>
+        <select data-field="mealType">${MEALTYPES.map(t => `<option ${t === d.mealType ? "selected" : ""}>${t}</option>`).join("")}</select>
+      </div>
+    </div>
+
+    <div class="field">
+      <label>整体评分</label>
+      ${starsInput(d.rating, "meal")}
+    </div>
+
+    <div class="field">
+      <label>点了什么（每道菜单独打分，方便以后回顾）</label>
+      ${dishRows}
+      <button class="btn ghost block" data-action="add-dish" style="margin-top:4px">＋ 添加一道菜</button>
+    </div>
+
+    <div class="field">
+      <label>备注</label>
+      <textarea class="inp" data-field="note" placeholder="环境、价格、值不值得再来…">${esc(d.note)}</textarea>
+    </div>
+
+    <div class="field">
+      <label>照片</label>
+      <div class="photogrid">
+        ${oldHTML}${newHTML}
+        <button class="addphoto" data-action="pick-photos"><span>＋</span><span>照片</span></button>
+      </div>
+      <p class="note" style="font-size:12px;margin-top:6px">上传后会自动压到长边 1280px，省空间。</p>
+    </div>
+
+    <div class="detail-actions">
+      <button class="btn ghost" style="flex:1" data-action="close">取消</button>
+      <button class="btn" style="flex:2" data-action="save">保存</button>
+    </div>`;
+}
+
+async function pickPhotos(){
+  $("#photo-input").click();
+}
+async function onFilesPicked(files){
+  for (const f of files){
+    if (!f.type.startsWith("image/")) continue;
+    try {
+      const blob = await compressImage(f);
+      state.draftNewPhotos.push({ tmp: uid(), blob, url: URL.createObjectURL(blob) });
+    } catch(e){
+      toast("有张图处理失败：" + e.message);
+    }
+  }
+  await renderForm();
+}
+
+async function saveDraft(){
+  const d = state.draft;
+  if (!d.restaurant.trim() && !d.dishes.length && !state.draftNewPhotos.length){
+    toast("至少写个店名或加点菜"); return;
+  }
+  if (!d.restaurant.trim()) d.restaurant = "（没写店名）";
+
+  const btn = document.querySelector('[data-action="save"]');
+  const orig = btn ? btn.textContent : "";
+  if (btn){ btn.textContent = "保存中…"; btn.disabled = true; }
+
+  try {
+    // 新照片先分配 id（云端要用 uuid 当文件名，本机照旧）
+    const newPhotos = state.draftNewPhotos.map(p => ({ id: uid(), blob: p.blob }));
+    const removed = state.draftRemove.slice();
+    const keep = (d.photoIds || []).filter(pid => !removed.includes(pid));
+    d.photoIds = keep.concat(newPhotos.map(p => p.id));
+    // 只保留填了菜名的菜：本机模式原本会留下「未命名」的空行，
+    // 云端模式又会把它过滤掉，导致「保存了、刷新后消失」。统一成一样的规则。
+    const beforeDish = (d.dishes || []).length;
+    d.dishes = (d.dishes || []).filter(x => (x.name || "").trim());
+    const droppedDish = beforeDish - d.dishes.length;
+
+    if (!d.id){ d.id = uid(); d.createdAt = Date.now(); }
+    await DB.saveMeal(d, newPhotos, removed);
+
+    state.draftNewPhotos.forEach(p => { try { URL.revokeObjectURL(p.url); } catch(e){} });
+    removed.forEach(revokePhoto);
+
+    const i = state.meals.findIndex(x => x.id === d.id);
+    if (i >= 0) state.meals[i] = d; else state.meals.push(d);
+
+    state.draft = null; state.draftNewPhotos = []; state.draftRemove = [];
+    showOverlay(false);
+    renderCurrentTab();
+    toast(droppedDish > 0 ? `已保存（${droppedDish} 道没写菜名的已忽略）` : "已保存", droppedDish > 0 ? 3200 : 1700);
+  } catch(e){
+    console.error(e);
+    if (btn){ btn.textContent = orig; btn.disabled = false; }
+    DB.lastError = "保存失败：" + e.message;
+    toast(DB.lastError, 6000);
+  }
+}
+
+async function deleteMeal(id){
+  const m = state.meals.find(x => x.id === id);
+  if (!m) return;
+  if (!confirm(`删除「${m.restaurant}」这条记录？`)) return;
+  try {
+    await DB.delMeal(id);
+    (m.photoIds || []).forEach(revokePhoto);
+    state.meals = state.meals.filter(x => x.id !== id);
+    state.detailId = null;
+    showOverlay(false);
+    renderCurrentTab();
+    toast("已删除");
+  } catch(e){
+    console.error(e);
+    toast("删除失败：" + e.message);
+  }
+}
+
+/* =========================================================
+   统计
+   ========================================================= */
+function renderStats(){
+  const meals = state.meals;
+  if (!meals.length){
+    $("#view").innerHTML = `<div class="empty"><div class="big">📊</div><p>还没有数据，先记几顿。</p></div>`;
+    setFoot(); return;
+  }
+
+  const allDishes = meals.flatMap(m => (m.dishes || []).filter(d => d.rating));
+  const avg = arr => arr.length ? (arr.reduce((a, b) => a + Number(b.rating || 0), 0) / arr.length) : 0;
+
+  // 店铺统计
+  const byPlace = {};
+  meals.forEach(m => {
+    const k = (m.restaurant || "").trim() || "（没写店名）";
+    (byPlace[k] || (byPlace[k] = { name: k, n: 0, sum: 0, dates: [] }));
+    byPlace[k].n++; byPlace[k].sum += Number(m.rating || 0); byPlace[k].dates.push(m.date);
+  });
+  const places = Object.values(byPlace)
+    .map(p => ({ ...p, avg: p.sum / p.n }))
+    .sort((a, b) => b.avg - a.avg || b.n - a.n);
+
+  // 菜品榜
+  const byDish = {};
+  allDishes.forEach(d => {
+    const k = (d.name || "").trim(); if (!k) return;
+    (byDish[k] || (byDish[k] = { name: k, n: 0, sum: 0 }));
+    byDish[k].n++; byDish[k].sum += Number(d.rating);
+  });
+  const dishes = Object.values(byDish).map(d => ({ ...d, avg: d.sum / d.n }));
+  const best = dishes.slice().sort((a, b) => b.avg - a.avg || b.n - a.n).slice(0, 8);
+  const worst = dishes.filter(d => d.avg <= 2.5).sort((a, b) => a.avg - b.avg).slice(0, 5);
+
+  const rk = list => list.map((x, i) => `
+    <div class="rk"><span class="idx">${i + 1}</span><span class="nm">${esc(x.name)}${
+      x.n > 1 ? ` <span style="color:#b3a898;font-size:12px">×${x.n}</span>` : ""}</span>
+      <span class="sc">${"★".repeat(Math.round(x.avg))}</span>
+      <span style="color:#b3a898;font-size:12px;width:28px;text-align:right">${x.avg.toFixed(1)}</span></div>`).join("");
+
+  $("#view").innerHTML = `
+    <div class="stat-grid">
+      <div class="stat"><div class="k">吃了多少顿</div><div class="v">${meals.length}</div></div>
+      <div class="stat"><div class="k">去过几家店</div><div class="v">${places.length}</div></div>
+      <div class="stat"><div class="k">记过几道菜</div><div class="v">${dishes.reduce((a, b) => a + b.n, 0)}</div></div>
+      <div class="stat"><div class="k">平均评分</div><div class="v">${avg(meals.map(m => ({ rating: m.rating }))).toFixed(1)}</div></div>
+    </div>
+
+    <div class="rank"><h3>店铺排行（按平均分）</h3>${rk(places.slice(0, 10))}</div>
+    ${best.length ? `<div class="rank"><h3>值得再点的菜</h3>${rk(best)}</div>` : ""}
+    ${worst.length ? `<div class="rank"><h3>踩雷清单</h3>${rk(worst)}</div>` : ""}
+
+    <div class="detail-actions">
+      <button class="btn ghost" style="flex:1" data-action="export">导出备份</button>
+      <button class="btn ghost" style="flex:1" data-action="import">导入备份</button>
+    </div>
+    <p class="foot-hint">${DB.mode === "cloud" ? "数据存在云端，多台设备看到的是同一份。" : "数据只存在这台设备的浏览器里。点右上角 ⚙ 可以接云端同步。"}</p>`;
+  setFoot();
+}
+
+/* =========================================================
+   导出 / 导入
+   ========================================================= */
+async function exportJSON(){
+  const photos = {};
+  for (const m of state.meals){
+    for (const pid of (m.photoIds || [])){
+      if (photos[pid]) continue;
+      const blob = await DB.photoBlob(pid);
+      if (!blob) continue;
+      photos[pid] = await new Promise(res => {
+        const fr = new FileReader();
+        fr.onload = () => res(fr.result);
+        fr.readAsDataURL(blob);
+      });
+    }
+  }
+  const payload = { app: "food-journal", version: 1, exportedAt: new Date().toISOString(), meals: state.meals, photos };
+  const blob = new Blob([JSON.stringify(payload)], { type: "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `饭记备份-${todayISO()}.json`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 3000);
+  toast("已导出");
+}
+
+async function importJSON(file){
+  const text = await file.text();
+  let data;
+  try { data = JSON.parse(text); } catch(e){ return toast("文件不是有效的 JSON"); }
+  if (!Array.isArray(data.meals)) return toast("格式不对：缺 meals");
+  const ok = confirm(`将导入 ${data.meals.length} 条记录，追加到现有数据（相同 id 会覆盖）。继续？`);
+  if (!ok) return;
+  toast("导入中…");
+  try {
+    for (const m of data.meals){
+      const newPhotos = [];
+      for (const pid of (m.photoIds || [])){
+        const dataUrl = (data.photos || {})[pid];
+        if (!dataUrl) continue;
+        const blob = await (await fetch(dataUrl)).blob();
+        newPhotos.push({ id: pid, blob });
+      }
+      await DB.saveMeal(m, newPhotos, []);
+      const i = state.meals.findIndex(x => x.id === m.id);
+      if (i >= 0) state.meals[i] = m; else state.meals.push(m);
+    }
+    state._urls = new Map();
+    renderCurrentTab();
+    toast("导入完成");
+  } catch(e){
+    console.error(e);
+    toast("导入失败：" + e.message);
+  }
+}
+
+/* =========================================================
+   示例数据
+   ========================================================= */
+async function seed(){
+  const now = Date.now();
+  const samples = [
+    { restaurant: "巷口牛肉面", date: offsetDate(-2), mealType: "午餐", rating: 5, note: "汤头很浓，老板会问你加不加辣。",
+      dishes: [{ name: "红烧牛肉面", rating: 5, note: "肉软，面有嚼劲" }, { name: "卤蛋", rating: 3, note: "普通" }] },
+    { restaurant: "炭火烤肉·三号店", date: offsetDate(-9), mealType: "晚餐", rating: 4, note: "人均 120，人多要排队。",
+      dishes: [{ name: "牛舌", rating: 5, note: "薄切，烤 20 秒就能吃" }, { name: "五花肉", rating: 2, note: "太厚，烤老了" }, { name: "冷面", rating: 4, note: "解腻" }] },
+    { restaurant: "楼下沙县", date: offsetDate(-15), mealType: "早餐", rating: 3, note: "",
+      dishes: [{ name: "蒸饺", rating: 3, note: "就这样" }, { name: "拌面", rating: 2, note: "花生酱放太多，糊嘴" }] }
+  ];
+  for (const s of samples){
+    const m = { ...s, id: uid(), photoIds: [], createdAt: now + Math.random() };
+    await DB.saveMeal(m, [], []);
+    state.meals.push(m);
+  }
+  renderCurrentTab();
+  toast("示例已放入，可以随便改");
+}
+function offsetDate(days){
+  const d = new Date(); d.setDate(d.getDate() + days);
+  d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+  return d.toISOString().slice(0, 10);
+}
+
+/* =========================================================
+   交互
+   ========================================================= */
+function showOverlay(v){
+  const o = $("#overlay");
+  o.classList.toggle("show", !!v);
+  if (!v) $("#sheet").innerHTML = "";
+}
+function closeOverlay(){
+  if (state.draftNewPhotos.length){
+    state.draftNewPhotos.forEach(p => { try { URL.revokeObjectURL(p.url); } catch(e){} });
+    state.draftNewPhotos = [];
+  }
+  state.draft = null; state.draftRemove = []; state.detailId = null;
+  showOverlay(false);
+  if (!state.meals.length) renderList();
+}
+
+document.addEventListener("click", async e => {
+  /* 星星优先：星点没有 data-action，必须放在前面 */
+  const starHit = e.target.closest("[data-star]");
+  if (starHit && state.draft){
+    const box = starHit.closest(".stars");
+    const v = Number(starHit.dataset.star);
+    const scope = box.dataset.scope;
+    if (scope === "meal") state.draft.rating = v;
+    else if (scope === "dish") state.draft.dishes[Number(box.dataset.idx)].rating = v;
+    return renderForm();
+  }
+
+  const el = e.target.closest("[data-action]");
+  if (!el) {
+    if (e.target.id === "overlay") { closeOverlay(); }
+    return;
+  }
+  const a = el.dataset.action, id = el.dataset.id;
+
+  if (a === "seed") return seed();
+  if (a === "close") return closeOverlay();
+  if (a === "open-settings") return openSettings();
+  if (a === "cloud-save"){
+    const url = ($("#cfg-url") || {}).value || "";
+    const key = ($("#cfg-key") || {}).value || "";
+    if (!/^https:\/\/.+/.test(url.trim())) return toast("URL 要以 https:// 开头");
+    if (key.trim().length < 20) return toast("key 不对，太短了");
+    Cloud.setConfig(url.trim(), key.trim());
+    DB.cloudError = "";
+    DB.mode = "local";
+    await renderSettings();
+    return toast("已保存，接着登录");
+  }
+  if (a === "cloud-signin" || a === "cloud-signup"){
+    const email = ($("#login-email") || {}).value || "";
+    const pass = ($("#login-pass") || {}).value || "";
+    if (!email.includes("@")) return toast("邮箱填错了");
+    if (pass.length < 6) return toast("密码至少 6 位");
+    const t0 = el.textContent;
+    el.disabled = true; el.textContent = "处理中…";
+    try {
+      if (a === "cloud-signup") await Cloud.signUp(email.trim(), pass);
+      else await Cloud.signIn(email.trim(), pass);
+      await enterCloud();
+    } catch(e){
+      let msg = e.message || "未知错误";
+      if (/invalid login credentials/i.test(msg)) msg = "邮箱或密码不对";
+      if (/already registered/i.test(msg)) msg = "这个邮箱注册过了，直接点登录";
+      DB.lastError = (a === "cloud-signup" ? "注册失败：" : "登录失败：") + msg;
+      toast(DB.lastError, 6000);
+      await renderSettings();
+    } finally {
+      if (el.isConnected){ el.disabled = false; el.textContent = t0; }
+    }
+    return;
+  }
+  if (a === "cloud-send-link"){
+    return toast("已经改成邮箱+密码登录，不需要邮件链接了");
+  }
+  if (a === "cloud-join-ws"){
+    const code = (($("#join-code") || {}).value || "").trim();
+    if (!code){ DB.lastError = "邀请码是空的"; return toast(DB.lastError, 4000); }
+    try { await Cloud.joinWorkspace(code); await enterCloud(); }
+    catch(e){ DB.lastError = "加入失败：" + e.message; toast(DB.lastError, 6000); await renderSettings(); }
+    return;
+  }
+  if (a === "cloud-create-ws"){
+    const name = (($("#ws-name") || {}).value || "").trim() || "我们的饭记";
+    try { await Cloud.createWorkspace(name); await enterCloud(); }
+    catch(e){ DB.lastError = "新建失败：" + e.message; toast(DB.lastError, 6000); await renderSettings(); }
+    return;
+  }
+  if (a === "cloud-copy") return copyInvite();
+  if (a === "cloud-sync") return enterCloud();
+  if (a === "cloud-logout"){
+    if (!confirm("退出登录？本机数据不会被删。")) return;
+    try { await Cloud.logout(); } catch(e) {}
+    DB.mode = "local"; DB.ws = null;
+    state.meals = await Local.allMeals();
+    await renderSettings();
+    renderCurrentTab();
+    toast("已退出");
+    return;
+  }
+  if (a === "cloud-clear"){
+    if (!confirm("清空云端配置并回到本机模式？（云端数据不会删）")) return;
+    Cloud.clear();
+    DB.mode = "local"; DB.ws = null; DB.cloudError = "";
+    try { state.meals = await Local.allMeals(); } catch(e){}
+    closeOverlay();
+    renderCurrentTab();
+    toast("已回到本机模式");
+    return;
+  }
+  if (a === "detail") return openDetail(id);
+  if (a === "edit") return openForm(id);
+  if (a === "delete-meal") return deleteMeal(id);
+  if (a === "pick-photos") return pickPhotos();
+  if (a === "save") return saveDraft();
+  if (a === "export") return exportJSON();
+  if (a === "import") {
+    const inp = document.createElement("input");
+    inp.type = "file"; inp.accept = ".json";
+    inp.onchange = () => inp.files[0] && importJSON(inp.files[0]);
+    inp.click(); return;
+  }
+  if (a === "add-dish"){
+    state.draft.dishes.push({ name: "", rating: 4, note: "" });
+    await renderForm(); return;
+  }
+  if (a === "remove-dish"){
+    state.draft.dishes.splice(Number(el.dataset.idx), 1);
+    await renderForm(); return;
+  }
+  if (a === "remove-photo"){
+    const pid = el.dataset.pid;
+    if (!state.draftRemove.includes(pid)) state.draftRemove.push(pid);
+    await renderForm(); return;
+  }
+  if (a === "remove-tmp"){
+    const tmp = el.dataset.tmp;
+    state.draftNewPhotos = state.draftNewPhotos.filter(p => {
+      if (p.tmp === tmp){ try { URL.revokeObjectURL(p.url); } catch(e){} return false; }
+      return true;
+    });
+    await renderForm(); return;
+  }
+});
+
+// 输入绑定
+document.addEventListener("input", e => {
+  if (e.target.id === "q"){ state.q = e.target.value; paintList(); return; }
+  const el = e.target.closest("[data-field]");
+  if (!el || !state.draft) return;
+  const f = el.dataset.field, v = el.value;
+  if (f === "dish-name") state.draft.dishes[Number(el.dataset.idx)].name = v;
+  else if (f === "dish-note") state.draft.dishes[Number(el.dataset.idx)].note = v;
+  else if (f === "restaurant" || f === "note" || f === "date") state.draft[f] = v;
+});
+document.addEventListener("change", e => {
+  const el = e.target.closest("[data-field]");
+  if (el && state.draft && el.dataset.field === "mealType") state.draft.mealType = el.value;
+  if (el && state.draft && el.dataset.field === "date") state.draft.date = el.value;
+});
+
+$("#photo-input").addEventListener("change", async e => {
+  const files = Array.from(e.target.files || []);
+  e.target.value = "";
+  if (files.length) await onFilesPicked(files);
+});
+
+document.querySelectorAll(".tabs button").forEach(b => {
+  b.addEventListener("click", () => {
+    document.querySelectorAll(".tabs button").forEach(x => x.classList.remove("on"));
+    b.classList.add("on");
+    state.tab = b.dataset.tab;
+    if (state.tab === "list") renderList(); else renderStats();
+  });
+});
+
+function renderCurrentTab(){
+  if (state.tab === "stats") renderStats(); else renderList();
+}
+
+function renderNoWorkspace(){
+  $("#view").innerHTML = `<div class="empty">
+    <div class="big">🔗</div>
+    <p>云端已登录，但还没加入任何空间。</p>
+    <p style="margin-top:16px"><button class="btn" data-action="open-settings">去加入 / 新建空间</button></p>
+  </div>`;
+  setFoot();
+}
+
+/* =========================================================
+   设置 · 云端接入
+   ========================================================= */
+async function openSettings(){
+  await renderSettings();
+  showOverlay(true);
+}
+
+async function renderSettings(){
+  const cfg = Cloud.config();
+  const ses = Cloud.session();
+  let body = "";
+
+  const status = DB.mode === "cloud"
+    ? "云端同步 · " + (DB.ws ? DB.ws.name : "")
+    : (DB.mode === "cloud-no-ws" ? "云端已登录，还没加入空间" : "仅本机（数据只在这台设备）");
+  body += `<div class="kv"><span class="k">当前</span><span class="v">${esc(status)}</span></div>`;
+  if (DB.lastError){
+    body += `<div style="background:#fdeceb;border:1px solid #f0cfcb;color:#a93226;border-radius:12px;padding:10px 12px;font-size:13px;margin:10px 0;line-height:1.55;word-break:break-all">${esc(DB.lastError)}</div>`;
+  }
+
+  if (!cfg){
+    body += `
+      <p class="hintline">想多设备同步、让朋友一起记，就填 Supabase 项目的两个值（项目 → Settings → API）。不填就继续用本机模式，功能完全一样。</p>
+      <div class="field"><label>Project URL</label>
+        <input class="inp" id="cfg-url" placeholder="https://xxxx.supabase.co" autocomplete="off"></div>
+      <div class="field"><label>anon public key</label>
+        <input class="inp" id="cfg-key" placeholder="eyJhbGciOi..." autocomplete="off"></div>
+      <button class="btn block" data-action="cloud-save">保存</button>`;
+  } else {
+    body += `
+      <div class="kv"><span class="k">服务器</span><span class="v">${esc(cfg.url)}</span></div>
+      <div class="kv"><span class="k">账号</span><span class="v">${ses && ses.user ? esc(ses.user.email) : "未登录"}</span></div>`;
+
+    if (!ses){
+      body += `
+        ${DB.cloudError ? `<p class="hintline" style="color:#c0392b">${esc(DB.cloudError)}</p>` : ""}
+        <p class="hintline">第一次用点「注册」，以后点「登录」。不需要邮箱验证，密码最低 6 位。</p>
+        <div class="field"><label>邮箱</label>
+          <input class="inp" id="login-email" type="email" autocomplete="email" placeholder="you@example.com"></div>
+        <div class="field"><label>密码</label>
+          <input class="inp" id="login-pass" type="password" autocomplete="current-password" placeholder="至少 6 位"></div>
+        <div class="detail-actions">
+          <button class="btn" style="flex:1" data-action="cloud-signin">登录</button>
+          <button class="btn ghost" style="flex:1" data-action="cloud-signup">注册</button>
+        </div>`;
+    } else if (DB.mode === "cloud-no-ws"){
+      body += `
+        <p class="hintline">登录成功，但还没加入空间。问朋友要邀请码，或者自己新建一个。</p>
+        <div class="field"><label>加入（填邀请码）</label>
+          <input class="inp" id="join-code" placeholder="8 位邀请码" autocapitalize="characters"></div>
+        <button class="btn block" data-action="cloud-join-ws">加入空间</button>
+        <div class="field" style="margin-top:18px"><label>或者新建</label>
+          <input class="inp" id="ws-name" placeholder="我们的饭记"></div>
+        <button class="btn ghost block" data-action="cloud-create-ws">新建空间</button>`;
+    } else {
+      body += `
+        ${DB.ws ? `<div class="kv"><span class="k">空间</span><span class="v">${esc(DB.ws.name)}</span></div>
+        <div class="kv"><span class="k">邀请码</span><span class="v code">${esc(DB.ws.inviteCode || "")}</span></div>` : ""}
+        <p class="hintline">把邀请码发给朋友：他们用邮箱登录后填这个码，就能一起记同一份数据。</p>
+        <div class="detail-actions">
+          <button class="btn ghost" style="flex:1" data-action="cloud-copy">复制邀请码</button>
+          <button class="btn ghost" style="flex:1" data-action="cloud-sync">重新同步</button>
+        </div>`;
+    }
+    body += `
+      <div class="detail-actions">
+        <button class="btn danger" style="flex:1" data-action="cloud-logout">退出登录</button>
+        <button class="btn ghost" style="flex:1" data-action="cloud-clear">清空配置</button>
+      </div>`;
+  }
+
+  $("#sheet").innerHTML = `
+    <div class="sheet-head"><h2>设置</h2><button class="x" data-action="close">✕</button></div>
+    ${body}`;
+}
+
+async function enterCloud(){
+  const mode = await DB.reconnect();
+  if (mode === "cloud"){
+    try {
+      state.meals = await DB.allMeals();
+      renderCurrentTab();
+      DB.lastError = "";
+      toast("已连上云端");
+    } catch(e){
+      DB.lastError = "读取数据失败：" + e.message;
+      toast(DB.lastError, 6000);
+    }
+  } else if (mode === "cloud-no-ws"){
+    DB.lastError = "";
+    renderNoWorkspace();
+  } else {
+    DB.lastError = "连接失败：" + (DB.cloudError || "未知错误");
+    toast(DB.lastError, 6000);
+  }
+  if ($("#overlay").classList.contains("show")) await renderSettings();
+}
+
+async function copyInvite(){
+  const code = DB.ws && DB.ws.inviteCode;
+  if (!code) return toast("没有邀请码");
+  try {
+    await navigator.clipboard.writeText(code);
+    toast("已复制：" + code);
+  } catch(e){
+    const ta = document.createElement("textarea");
+    ta.value = code; document.body.appendChild(ta); ta.select();
+    try { document.execCommand("copy"); toast("已复制：" + code); }
+    catch(err){ toast("复制失败，手动记一下：" + code); }
+    ta.remove();
+  }
+}
+
+$("#fab").addEventListener("click", () => openForm(null));
+
+/* 启动 */
+(async function boot(){
+  Cloud.load();
+  if (window.FJ_CONFIG && window.FJ_CONFIG.url && !Cloud.config()){
+    Cloud.setConfig(window.FJ_CONFIG.url, window.FJ_CONFIG.key);
+  }
+  const fromLink = Cloud.recoverHash();
+  await DB.init();
+  if (DB.mode === "cloud-no-ws"){ renderNoWorkspace(); return; }
+  try {
+    state.meals = await DB.allMeals();
+  } catch(e){
+    console.error(e);
+    toast("读取数据失败：" + e.message);
+    state.meals = [];
+  }
+  renderList();
+  if (fromLink) toast("登录成功");
+  if (DB.cloudError) toast("云端连不上，先用本机数据");
+})();
+</script>
+</body>
+</html>
